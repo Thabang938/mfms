@@ -50,7 +50,6 @@ export default function NavBar() {
         <div className="md:hidden bg-green-50 border-t border-green-200 w-full">
           <div className="px-6 py-4 flex flex-col gap-4 text-lg font-medium">
             <Link href="/" className="hover:text-green-700">Home</Link>
-            <Link href="/about" className="hover:text-green-700">About Us</Link>
             <Link href="/Login" className="flex items-center gap-2 hover:text-green-700">
               <FaUserCircle className="text-2xl" />
               Guest
