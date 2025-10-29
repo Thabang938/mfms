@@ -25,7 +25,6 @@ export default function NavBar() {
         {/* Desktop Navigation */}
         <div className="hidden md:flex items-center gap-8 text-lg font-medium">
           <Link href="/" className="hover:text-green-700">Home</Link>
-          <Link href="/about" className="hover:text-green-700">About Us</Link>
           <Link href="/Login" className="flex items-center gap-2 hover:text-green-700">
             <FaUserCircle className="text-2xl" />
             Guest
