@@ -15,6 +15,7 @@
     "@supabase/supabase-js": "^2.75.1",
     "chart.js": "^4.5.1",
     "dayjs": "^1.11.18",
+    "framer-motion": "^12.23.24",
     "lucide-react": "^0.548.0",
     "next": "15.5.6",
     "postcss": "^8.5.6",

@@ -2,7 +2,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import SideBar from '@/components/SideBar';
-import { FaPlus, FaDownload, FaSearch, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
+import {
+  FaPlus, FaDownload, FaSearch, FaChevronLeft, FaChevronRight, FaCarSide
+} from 'react-icons/fa';
 import Modal from '@/components/Modal';
 import LicenseForm from '@/components/forms/LicenseForm';
 import dayjs from 'dayjs';
@@ -14,7 +16,7 @@ export default function LicensesPage() {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [perPage, setPerPage] = useState(10);
+  const [perPage, setPerPage] = useState(6);
   const [page, setPage] = useState(1);
 
   async function fetchData() {
@@ -46,7 +48,6 @@ export default function LicensesPage() {
 
   const filtered = useMemo(() => {
     let list = licenses.slice();
-
     if (statusFilter) {
       list = list.filter(l => {
         const raw = getRawDaysLeft(l.expiry_date);
@@ -56,7 +57,6 @@ export default function LicensesPage() {
         return true;
       });
     }
-
     const q = (search || '').trim().toLowerCase();
     if (q) {
       list = list.filter(l => {
@@ -67,7 +67,6 @@ export default function LicensesPage() {
         return `${reg} ${make} ${model}`.toLowerCase().includes(q);
       });
     }
-
     return list;
   }, [licenses, vehicles, search, statusFilter]);
 
@@ -119,20 +118,19 @@ export default function LicensesPage() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
           <div>
             <h1 className="text-3xl font-bold text-green-800">License Renewals</h1>
-            <p className="text-sm text-green-600">Manage expiry dates and renewal records</p>
+            <p className="text-sm text-green-600">Track, monitor, and manage renewals efficiently</p>
           </div>
 
           <div className="flex items-center gap-3">
             <button
               onClick={exportCSV}
-              className="flex items-center bg-white border border-green-300 text-green-700 px-4 py-2 rounded hover:bg-green-100 transition"
+              className="flex items-center bg-white border border-green-300 text-green-700 px-4 py-2 rounded-md hover:bg-green-100 transition"
             >
               <FaDownload className="mr-2" /> Export
             </button>
-
             <button
               onClick={() => setOpenAdd(true)}
-              className="flex items-center bg-green-700 text-white px-4 py-2 rounded hover:bg-green-800 transition"
+              className="flex items-center bg-green-700 text-white px-4 py-2 rounded-md hover:bg-green-800 transition"
             >
               <FaPlus className="mr-2" /> Record Renewal
             </button>
@@ -141,26 +139,14 @@ export default function LicensesPage() {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white p-4 rounded-lg border border-green-100 shadow-sm text-center">
-            <div className="text-sm text-green-700">Total Licenses</div>
-            <div className="text-3xl font-bold text-green-900">{licenses.length}</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg border border-green-100 shadow-sm text-center">
-            <div className="text-sm text-green-700">Expired</div>
-            <div className="text-3xl font-bold text-red-800">{expiredCount}</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg border border-green-100 shadow-sm text-center">
-            <div className="text-sm text-green-700">Due Soon</div>
-            <div className="text-3xl font-bold text-orange-800">{dueSoonCount}</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg border border-green-100 shadow-sm text-center">
-            <div className="text-sm text-green-700">Current</div>
-            <div className="text-3xl font-bold text-blue-800">{currentCount}</div>
-          </div>
+          <StatCard label="Total Licenses" value={licenses.length} color="text-green-900" />
+          <StatCard label="Expired" value={expiredCount} color="text-red-700" />
+          <StatCard label="Due Soon" value={dueSoonCount} color="text-orange-700" />
+          <StatCard label="Current" value={currentCount} color="text-blue-700" />
         </div>
 
-        {/* Filters & Search */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+        {/* Filters */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
           <div className="flex items-center gap-3">
             <div className="relative">
               <FaSearch className="absolute left-3 top-3 text-green-400" />
@@ -186,50 +172,73 @@ export default function LicensesPage() {
           </div>
         </div>
 
-        {/* Table */}
-        <div className="bg-white rounded shadow border border-green-200 overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="bg-green-50 text-green-800">
-              <tr>
-                <th className="px-4 py-3 text-left">Vehicle</th>
-                <th className="px-4 py-3 text-left">Registration</th>
-                <th className="px-4 py-3 text-left">Expiry Date</th>
-                <th className="px-4 py-3 text-left">Days Left</th>
-                <th className="px-4 py-3 text-left">Renewal Cost</th>
-                <th className="px-4 py-3 text-left">Status</th>
-              </tr>
-            </thead>
+        {/* License Cards */}
+        {loading && (
+          <div className="text-center text-green-600 py-12">Loading licenses...</div>
+        )}
+        {!loading && paged.length === 0 && (
+          <div className="text-center text-green-600 py-12">No license records found.</div>
+        )}
+        {!loading && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {paged.map((l, i) => {
+              const vehicle = vehicles.find(v => v.id === l.vehicle_id);
+              const raw = getRawDaysLeft(l.expiry_date);
+              const daysLeft = getDaysLeft(l.expiry_date);
+              const statusLabel = (typeof raw === 'number')
+                ? (raw < 0 ? 'Expired' : raw <= 14 ? 'Due Soon' : 'Current')
+                : '—';
+              const statusColor = statusLabel === 'Expired'
+                ? 'bg-red-100 text-red-800'
+                : statusLabel === 'Due Soon'
+                  ? 'bg-orange-100 text-orange-800'
+                  : 'bg-blue-100 text-blue-800';
 
-            <tbody>
-              {loading && (
-                <tr><td colSpan="6" className="px-6 py-12 text-center text-green-600">Loading licenses...</td></tr>
-              )}
-              {!loading && paged.length === 0 && (
-                <tr><td colSpan="6" className="px-6 py-12 text-center text-green-600">No license records found.</td></tr>
-              )}
-              {!loading && paged.map((l, i) => {
-                const vehicle = vehicles.find(v => v.id === l.vehicle_id);
-                const raw = getRawDaysLeft(l.expiry_date);
-                const daysLeft = getDaysLeft(l.expiry_date);
-                const statusLabel = (typeof raw === 'number') ? (raw < 0 ? 'Expired' : raw <= 14 ? 'Due Soon' : 'Current') : '—';
-                return (
-                  <tr key={l.id || i} className="border-t hover:bg-green-50">
-                    <td className="px-4 py-3">{vehicle ? `${vehicle.make} ${vehicle.model}` : 'Unknown'}</td>
-                    <td className="px-4 py-3">{vehicle?.registration_number || '—'}</td>
-                    <td className="px-4 py-3">{l.expiry_date || '—'}</td>
-                    <td className="px-4 py-3">{typeof daysLeft === 'number' ? `${daysLeft} days` : '—'}</td>
-                    <td className="px-4 py-3">R {l.renewal_cost?.toLocaleString() || '—'}</td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded text-xs font-semibold ${statusLabel === 'Expired' ? 'bg-red-200 text-red-800' : statusLabel === 'Due Soon' ? 'bg-orange-200 text-orange-800' : 'bg-blue-200 text-blue-800'}`}>{statusLabel}</span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+              return (
+                <div
+                  key={l.id || i}
+                  className="bg-white border border-green-100 rounded-xl shadow-sm hover:shadow-md transition p-5 flex flex-col gap-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-green-100 text-green-700 p-3 rounded-full">
+                        <FaCarSide />
+                      </div>
+                      <div>
+                        <h2 className="text-lg font-semibold text-green-900">
+                          {vehicle ? `${vehicle.make} ${vehicle.model}` : 'Unknown Vehicle'}
+                        </h2>
+                        <p className="text-sm text-green-700">{vehicle?.registration_number || '—'}</p>
+                      </div>
+                    </div>
+                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${statusColor}`}>
+                      {statusLabel}
+                    </span>
+                  </div>
 
-          {/* Pagination */}
-          <div className="flex items-center justify-between px-4 py-3 border-t bg-white">
+                  <div className="grid grid-cols-2 gap-y-2 text-sm text-green-700 mt-2">
+                    <div>Expiry Date:</div>
+                    <div className="font-medium text-green-900">{l.expiry_date || '—'}</div>
+
+                    <div>Days Left:</div>
+                    <div className="font-medium text-green-900">
+                      {typeof daysLeft === 'number' ? `${daysLeft} days` : '—'}
+                    </div>
+
+                    <div>Renewal Cost:</div>
+                    <div className="font-medium text-green-900">
+                      R {l.renewal_cost?.toLocaleString() || '—'}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Pagination */}
+        {!loading && total > 0 && (
+          <div className="flex items-center justify-between px-2 py-6 mt-6 border-t border-green-100">
             <div className="flex items-center gap-3">
               <button
                 className="px-3 py-1 border rounded bg-white text-green-700 disabled:opacity-40 flex items-center gap-2"
@@ -250,21 +259,36 @@ export default function LicensesPage() {
 
             <div className="flex items-center gap-3">
               <div className="text-sm text-green-700">Rows</div>
-              <select className="px-2 py-1 border rounded" value={perPage} onChange={e => { setPerPage(Number(e.target.value)); setPage(1); }}>
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={25}>25</option>
+              <select
+                className="px-2 py-1 border rounded"
+                value={perPage}
+                onChange={e => { setPerPage(Number(e.target.value)); setPage(1); }}
+              >
+                <option value={6}>6</option>
+                <option value={12}>12</option>
+                <option value={24}>24</option>
               </select>
-              <div className="text-sm text-green-600">Total: <span className="font-medium text-green-800">{total}</span></div>
+              <div className="text-sm text-green-600">
+                Total: <span className="font-medium text-green-800">{total}</span>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Modal */}
         <Modal open={openAdd} onClose={() => setOpenAdd(false)} title="Add License">
           <LicenseForm onSuccess={() => { fetchData(); setOpenAdd(false); }} onClose={() => setOpenAdd(false)} />
         </Modal>
       </main>
+    </div>
+  );
+}
+
+function StatCard({ label, value, color }) {
+  return (
+    <div className="bg-white p-4 rounded-lg border border-green-100 shadow-sm text-center hover:shadow-md transition">
+      <div className="text-sm text-green-700">{label}</div>
+      <div className={`text-3xl font-bold ${color}`}>{value}</div>
     </div>
   );
 }
