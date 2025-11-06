@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabaseClient';
 import SideBar from '@/components/SideBar';
 import { FaTools, FaPlus, FaSearch, FaDownload } from 'react-icons/fa';
 import Modal from '@/components/Modal';
-import ServiceForm from '@/components/forms/ServiceForm';
+import ServiceForm from '@/components/Forms/ServiceForm';
 
 export default function ServicesPage() {
   const [services, setServices] = useState([]);

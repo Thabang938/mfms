@@ -1,12 +1,4 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {
-  experimental: {
-    turbopack: true, // enable Turbopack
-  },
-  webpack: (config) => {
-    config.resolve.alias['@'] = path.resolve('./');
-    return config;
-  },
-};
+const nextConfig = {};
 
 export default nextConfig;
