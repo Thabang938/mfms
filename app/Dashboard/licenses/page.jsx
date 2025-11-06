@@ -6,7 +6,7 @@ import {
   FaPlus, FaDownload, FaSearch, FaChevronLeft, FaChevronRight, FaCarSide
 } from 'react-icons/fa';
 import Modal from '@/components/Modal';
-import LicenseForm from '@/components/forms/LicenseForm';
+import LicenseForm from '../../..//components/forms/LicenseForm';
 import dayjs from 'dayjs';
 
 export default function LicensesPage() {

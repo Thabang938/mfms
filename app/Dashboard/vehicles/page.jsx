@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabaseClient';
 import SideBar from '@/components/SideBar';
 import { FaPlus, FaSearch, FaDownload, FaCar, FaTools, FaCheckCircle } from 'react-icons/fa';
 import Modal from '@/components/Modal';
-import VehicleForm from '@/components/forms/VehicleForm';
+import VehicleForm from '../../../components/forms/VehicleForm';
 
 export default function VehiclesPage() {
   const [vehicles, setVehicles] = useState([]);

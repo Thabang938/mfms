@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabaseClient';
 import SideBar from '@/components/SideBar';
 import { FaPlus, FaSearch, FaChevronLeft, FaChevronRight, FaDownload } from 'react-icons/fa';
 import Modal from '@/components/Modal';
-import AccidentForm from '@/components/forms/AccidentForm';
+import AccidentForm from '../../../components/forms/AccidentForm';
 
 export default function AccidentsPage() {
   const [accidents, setAccidents] = useState([]);

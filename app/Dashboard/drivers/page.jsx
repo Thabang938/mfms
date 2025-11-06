@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabaseClient';
 import SideBar from '@/components/SideBar';
 import { FaPlus, FaSearch, FaChevronLeft, FaChevronRight, FaFileExport, FaUser } from 'react-icons/fa';
 import Modal from '@/components/Modal';
-import DriverForm from '@/components/forms/DriverForm';
+import DriverForm from '../../../components/forms/DriverForm';
 
 export default function DriversPage() {
   const [drivers, setDrivers] = useState([]);
