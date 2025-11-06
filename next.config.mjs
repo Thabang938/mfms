@@ -1,11 +1,12 @@
-const path = require('path');
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  experimental: {
+    turbopack: true, // enable Turbopack
+  },
   webpack: (config) => {
-    config.resolve.alias['@'] = path.resolve(__dirname);
+    config.resolve.alias['@'] = path.resolve('./');
     return config;
   },
 };
 
-module.exports = nextConfig;
+export default nextConfig;
