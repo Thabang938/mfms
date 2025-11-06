@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import SideBar from '@/components/SideBar';
 import Modal from '@/components/Modal';
-import FuelForm from '../../../components/forms/FuelForm';
+import FuelForm from '@/components/forms/FuelForm';
 import { FaPlus, FaSearch, FaDownload } from 'react-icons/fa';
 // ...existing code...
 

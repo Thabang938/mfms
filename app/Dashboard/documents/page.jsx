@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabaseClient';
 import SideBar from '@/components/SideBar';
 import { FaPlus, FaSearch, FaChevronLeft, FaChevronRight, FaDownload } from 'react-icons/fa';
 import Modal from '@/components/Modal';
-import DocumentForm from '../../../components/forms/DocumentForm';
+import DocumentForm from '@/components/forms/DocumentForm';
 
 export default function DocumentsPage() {
   const [documents, setDocuments] = useState([]);
