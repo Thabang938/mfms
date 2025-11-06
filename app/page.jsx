@@ -11,6 +11,12 @@ export default function HomePage() {
           maintenance, licenses, tyres, drivers, and reports in one place.
         </p>
       </main>
+
+      <footer className="w-full bg-green-700 text-white py-4 flex items-center justify-center">
+        <p className="text-sm flex items-center">
+          <span className="mr-1">&copy;</span> 2025 - by IT Department
+        </p>
+      </footer>
     </>
   );
 }

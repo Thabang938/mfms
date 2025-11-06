@@ -1,4 +1,3 @@
-// ...existing code...
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
@@ -6,7 +5,7 @@ import SideBar from '@/components/SideBar';
 import Modal from '@/components/Modal';
 import FuelForm from '@/components/forms/FuelForm';
 import { FaPlus, FaSearch, FaDownload } from 'react-icons/fa';
-import { formatCurrency } from '@/lib/utils';
+// ...existing code...
 
 export default function FuelPage() {
   const [fuelLogs, setFuelLogs] = useState([]);
@@ -23,6 +22,11 @@ export default function FuelPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [perPage, setPerPage] = useState(10);
   const [page, setPage] = useState(1);
+
+  // Deterministic currency formatter to avoid server/client locale mismatch
+  const formatCurrencyFixed = (value) => {
+    return `R ${Number(value || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
 
   async function fetchData() {
     setLoading(true);
@@ -158,7 +162,7 @@ export default function FuelPage() {
 
           <div className="bg-white p-4 rounded-lg border border-green-100 shadow-sm">
             <div className="text-sm text-green-700">Total Cost</div>
-            <div className="text-2xl font-bold text-green-900">{formatCurrency(summary.totalCost || 0)}</div>
+            <div className="text-2xl font-bold text-green-900">{formatCurrencyFixed(summary.totalCost)}</div>
             <div className="text-xs text-green-500 mt-2">Sum of fuel spending</div>
           </div>
 
@@ -195,7 +199,7 @@ export default function FuelPage() {
                     <td className="px-4 py-3">{log.purchase_date || '—'}</td>
                     <td className="px-4 py-3">{getVehicleLabel(log.vehicle_id)}</td>
                     <td className="px-4 py-3">{log.liters ?? '—'} L</td>
-                    <td className="px-4 py-3">{formatCurrency(log.cost || 0)}</td>
+                    <td className="px-4 py-3">{formatCurrencyFixed(log.cost)}</td>
                     <td className="px-4 py-3">{log.odometer ? `${Number(log.odometer).toLocaleString()} km` : '—'}</td>
                     <td className="px-4 py-3">{log.station || '—'}</td>
                     <td className="px-4 py-3">

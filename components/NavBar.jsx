@@ -13,7 +13,7 @@ export default function NavBar() {
         {/* Logo and Brand */}
         <Link href="/" className="flex items-center gap-3">
           <Image
-            src="/logo.jpg"
+            src="/Emalahleni.png"
             alt="Municipal Fleet Management System Logo"
             width={36}
             height={36}
@@ -25,6 +25,7 @@ export default function NavBar() {
         {/* Desktop Navigation */}
         <div className="hidden md:flex items-center gap-8 text-lg font-medium">
           <Link href="/" className="hover:text-green-700">Home</Link>
+          <Link href="/About" className="hover:text-green-700">About</Link>
           <Link href="/Login" className="flex items-center gap-2 hover:text-green-700">
             <FaUserCircle className="text-2xl" />
             Guest

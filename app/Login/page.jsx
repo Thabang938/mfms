@@ -1,18 +1,29 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
+import { supabaseClient } from '@/lib/supabaseClient';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(true);
+    setErrorMessage('');
+
+    const { data, error } = await supabaseClient.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    setLoading(false);
+
     if (error) {
-      alert('Login failed: ' + error.message);
+      setErrorMessage(error.message);
     } else {
       router.push('/Dashboard');
     }
@@ -26,6 +37,7 @@ export default function LoginPage() {
           <h2 className="text-2xl font-bold text-green-800">Fleet Management System</h2>
           <p className="text-sm text-green-600">Sign in to manage your fleet</p>
         </div>
+
         <form onSubmit={handleLogin} className="space-y-5">
           <div>
             <label className="block text-sm font-medium text-green-700">Email</label>
@@ -49,11 +61,19 @@ export default function LoginPage() {
               required
             />
           </div>
+
+          {errorMessage && (
+            <p className="text-red-600 text-sm text-center">{errorMessage}</p>
+          )}
+
           <button
             type="submit"
-            className="w-full bg-green-700 text-white py-3 rounded hover:bg-green-800 transition"
+            disabled={loading}
+            className={`w-full bg-green-700 text-white py-3 rounded transition ${
+              loading ? 'opacity-60 cursor-not-allowed' : 'hover:bg-green-800'
+            }`}
           >
-            Sign In
+            {loading ? 'Signing In...' : 'Sign In'}
           </button>
         </form>
       </div>

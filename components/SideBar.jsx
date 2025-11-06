@@ -1,26 +1,27 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   FaCar, FaTools, FaExclamationTriangle, FaGasPump,
-  FaClipboardList, FaFolderOpen, FaUserTie, FaSignOutAlt, FaHome,
-  FaIdCard, FaDotCircle,
+  FaClipboardList, FaFolderOpen, FaUserTie, FaHome,
+  FaIdCard, FaDotCircle, FaSignOutAlt
 } from 'react-icons/fa';
 import { motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { supabase } from '@/lib/supabaseClient';
+import { supabaseClient } from '@/lib/supabaseClient';
 
 export default function SideBar() {
   const [expanded, setExpanded] = useState(true);
   const [role, setRole] = useState(null);
   const pathname = usePathname();
+  const router = useRouter();
 
-  // Fetch the logged-in user's role
+  // Fetch logged-in user's role
   useEffect(() => {
     const fetchRole = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await supabaseClient.auth.getUser();
       if (user) {
-        const { data } = await supabase
+        const { data } = await supabaseClient
           .from('users')
           .select('role')
           .eq('auth_id', user.id)
@@ -30,6 +31,16 @@ export default function SideBar() {
     };
     fetchRole();
   }, [pathname]);
+
+  // Handle Sign Out
+  const handleSignOut = async () => {
+    const { error } = await supabaseClient.auth.signOut();
+    if (error) {
+      console.error('Sign out error:', error.message);
+    } else {
+      router.push('/'); // Redirect after session cookie cleared
+    }
+  };
 
   // Sidebar items per role
   const navItems = [
@@ -61,7 +72,7 @@ export default function SideBar() {
           transition={{ duration: 0.4 }}
         />
 
-        {/* Modern Toggle Button */}
+        {/* Toggle Button */}
         <motion.button
           onClick={() => setExpanded(!expanded)}
           whileHover={{ scale: 1.05 }}
@@ -95,24 +106,32 @@ export default function SideBar() {
                 expanded={expanded}
                 active={pathname === item.href}
               />
-            ))
-        }
+            ))}
       </nav>
 
-      {/* Sign Out */}
-      <div className="p-4 border-t border-green-700 mt-auto">
-        <NavItem icon={<FaSignOutAlt />} label="Sign Out" href="/" expanded={expanded} />
+      {/* ✅ Sign Out Button */}
+      <div className="p-4 border-t border-green-700">
+        <button
+          onClick={handleSignOut}
+          className="flex items-center space-x-3 text-white hover:text-green-300 transition"
+        >
+          <FaSignOutAlt className="text-lg" />
+          {expanded && <span className="text-sm font-medium">Sign Out</span>}
+        </button>
       </div>
     </aside>
   );
 }
 
+// Navigation Item Component
 function NavItem({ icon, label, href, expanded, active }) {
   return (
     <a
       href={href}
       className={`flex items-center gap-3 p-3 rounded-xl transition-all duration-300 group
-        ${active ? 'bg-white text-green-800 font-semibold shadow-md' : 'text-white hover:bg-green-700 hover:text-white/90'}
+        ${active
+          ? 'bg-white text-green-800 font-semibold shadow-md'
+          : 'text-white hover:bg-green-700 hover:text-white/90'}
       `}
     >
       <span
