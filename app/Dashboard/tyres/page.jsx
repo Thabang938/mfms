@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabaseClient';
 import SideBar from '@/components/SideBar';
 import { FaPlus, FaSearch, FaChevronLeft, FaChevronRight, FaDownload } from 'react-icons/fa';
 import Modal from '@/components/Modal';
-import TireForm from '@/components/forms/TireForm';
+import TireForm from '@/components/Forms/TireForm';
 
 export default function TiresPage() {
   const [tires, setTires] = useState([]);
