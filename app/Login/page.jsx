@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabaseClient } from '@/lib/supabaseClient';
 
@@ -10,22 +10,46 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
+  // Redirect already logged-in users to dashboard
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (session) router.push('/Dashboard');
+    };
+    checkSession();
+  }, [router]);
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     setErrorMessage('');
 
-    const { data, error } = await supabaseClient.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const { data, error } = await supabaseClient.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    setLoading(false);
+      if (error) {
+        setErrorMessage(error.message);
+        setLoading(false);
+        return;
+      }
 
-    if (error) {
-      setErrorMessage(error.message);
-    } else {
+      // Wait briefly to ensure session is persisted
+      const { data: sessionData } = await supabaseClient.auth.getSession();
+      if (!sessionData.session) {
+        setErrorMessage('Failed to establish session. Please try again.');
+        setLoading(false);
+        return;
+      }
+
+      setLoading(false);
       router.push('/Dashboard');
+    } catch (err) {
+      console.error('Login error:', err);
+      setErrorMessage('An unexpected error occurred. Please try again.');
+      setLoading(false);
     }
   };
 
@@ -50,6 +74,7 @@ export default function LoginPage() {
               required
             />
           </div>
+
           <div>
             <label className="block text-sm font-medium text-green-700">Password</label>
             <input

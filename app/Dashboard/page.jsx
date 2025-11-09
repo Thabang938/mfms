@@ -35,7 +35,6 @@ export default function DashboardPage() {
         router.push('/Login');
         return;
       }
-
       setUser(userData.user);
 
       const now = new Date();
@@ -45,9 +44,9 @@ export default function DashboardPage() {
 
       const [vehiclesRes, servicesRes, accidentsRes, licensesRes, fuelRes] = await Promise.all([
         supabaseClient.from('vehicles').select('*'),
-        supabaseClient.from('services').select('*, vehicles(make, model, registration_number)'),
+        supabaseClient.from('services').select('*, vehicles(registration_number)'),
         supabaseClient.from('accidents').select('*'),
-        supabaseClient.from('licenses').select('*, vehicles(make, model, registration_number)'),
+        supabaseClient.from('licenses').select('*, vehicles(registration_number)'),
         supabaseClient.from('fuel_logs').select('*'),
       ]);
 
@@ -68,15 +67,21 @@ export default function DashboardPage() {
         })
         .reduce((sum, f) => sum + (f.cost || 0), 0) || 0;
 
-      const expiringLicensesList = licensesRes.data?.filter(l => {
-        const exp = new Date(l.expiry_date);
-        return exp >= startOfMonth && exp <= endOfMonth;
-      }) || [];
+      const expiringLicensesList = (licensesRes.data || [])
+        .filter(l => {
+          const exp = new Date(l.expiry_date);
+          return exp >= startOfMonth && exp <= endOfMonth;
+        })
+        .sort((a, b) => new Date(a.expiry_date) - new Date(b.expiry_date))
+        .slice(0, 3); // limit to 3
 
-      const upcomingMaintenance = servicesRes.data?.filter(s => {
-        const due = new Date(s.upcoming_service_date);
-        return due >= now && due <= thirtyDaysFromNow;
-      }) || [];
+      const upcomingMaintenance = (servicesRes.data || [])
+        .filter(s => {
+          const due = new Date(s.upcoming_service_date);
+          return due >= now && due <= thirtyDaysFromNow;
+        })
+        .sort((a, b) => new Date(a.upcoming_service_date) - new Date(b.upcoming_service_date))
+        .slice(0, 3); // limit to 3
 
       setStats({
         vehicles: vehiclesRes.data?.length || 0,
@@ -111,6 +116,7 @@ export default function DashboardPage() {
           )}
         </div>
 
+        {/* Top Stat Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <StatCard title="Total Vehicles" value={stats.vehicles} icon={<FaCar />} link="/Dashboard/vehicles" />
           <StatCard title="Due Maintenance" value={stats.dueMaintenance} icon={<FaTools />} link="/Dashboard/services" />
@@ -118,26 +124,29 @@ export default function DashboardPage() {
           <StatCard title="Expiring Licenses" value={stats.expiringLicensesList.length} icon={<FaIdCard />} link="/Dashboard/licenses" />
         </div>
 
+        {/* Cost Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           <StatCard title="Monthly Fuel Cost" value={`R ${Number(stats.fuelCost).toLocaleString()}`} icon={<FaGasPump />} link="/Dashboard/fuel" />
           <StatCard title="Service Cost (This Month)" value={`R ${Number(stats.serviceCost).toLocaleString()}`} icon={<FaWrench />} link="/Dashboard/services" />
         </div>
 
+        {/* Upcoming Maintenance & Expiring Licenses */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Section title="Upcoming Maintenance" subtitle="Services due within the next 30 days" viewAllLink="/Dashboard/services">
             <div className="space-y-3">
-              {stats.upcomingMaintenance.map((item, i) => (
-                <div key={i} className="bg-white p-4 rounded shadow border border-green-100">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <p className="font-semibold text-green-800">{item.vehicles?.registration_number || '—'}</p>
-                      <p className="text-sm text-green-600">{item.notes || 'Service'}</p>
+              {stats.upcomingMaintenance.length > 0 ? (
+                stats.upcomingMaintenance.map((item, i) => (
+                  <div key={i} className="bg-white p-4 rounded shadow border border-green-100">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="font-semibold text-green-800">{item.vehicles?.registration_number || '—'}</p>
+                        <p className="text-sm text-green-600">{item.notes || 'Service'}</p>
+                      </div>
+                      <div className="text-sm text-gray-600">Due: {item.upcoming_service_date}</div>
                     </div>
-                    <div className="text-sm text-gray-600">Due: {item.upcoming_service_date}</div>
                   </div>
-                </div>
-              ))}
-              {stats.upcomingMaintenance.length === 0 && (
+                ))
+              ) : (
                 <p className="text-green-600">No upcoming maintenance.</p>
               )}
             </div>
@@ -145,27 +154,24 @@ export default function DashboardPage() {
 
           <Section title="Expiring Licenses" subtitle="Licenses expiring this month" viewAllLink="/Dashboard/licenses">
             <div className="space-y-3">
-              {stats.expiringLicensesList.map((item, i) => {
-                const daysLeft = Math.ceil(
-                  (new Date(item.expiry_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
-                );
-                return (
-                  <div key={i} className="bg-white p-4 rounded shadow border border-green-100">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <p className="font-semibold text-green-800">
-                          {item.vehicles?.registration_number || '—'}
-                        </p>
-                        <p className="text-sm text-green-600">
-                          {daysLeft > 0 ? `${daysLeft} days left` : 'Expired'}
-                        </p>
+              {stats.expiringLicensesList.length > 0 ? (
+                stats.expiringLicensesList.map((item, i) => {
+                  const daysLeft = Math.ceil(
+                    (new Date(item.expiry_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+                  );
+                  return (
+                    <div key={i} className="bg-white p-4 rounded shadow border border-green-100">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <p className="font-semibold text-green-800">{item.vehicles?.registration_number || '—'}</p>
+                          <p className="text-sm text-green-600">{daysLeft > 0 ? `${daysLeft} days left` : 'Expired'}</p>
+                        </div>
+                        <div className="text-sm text-gray-600">Expires: {item.expiry_date}</div>
                       </div>
-                      <div className="text-sm text-gray-600">Expires: {item.expiry_date}</div>
                     </div>
-                  </div>
-                );
-              })}
-              {stats.expiringLicensesList.length === 0 && (
+                  );
+                })
+              ) : (
                 <p className="text-green-600">No expiring licenses this month.</p>
               )}
             </div>

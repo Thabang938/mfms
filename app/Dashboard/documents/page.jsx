@@ -1,10 +1,11 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { supabaseClient } from '@/lib/supabaseClient';
 import SideBar from '@/components/SideBar';
 import { FaPlus, FaSearch, FaChevronLeft, FaChevronRight, FaDownload } from 'react-icons/fa';
 import Modal from '@/components/Modal';
 import DocumentForm from '@/components/Forms/DocumentForm';
+import { useRouter } from 'next/navigation';
 
 export default function DocumentsPage() {
   const [documents, setDocuments] = useState([]);
@@ -14,19 +15,67 @@ export default function DocumentsPage() {
   const [search, setSearch] = useState('');
   const [perPage, setPerPage] = useState(10);
   const [page, setPage] = useState(1);
+  const [session, setSession] = useState(null);
+  const router = useRouter();
 
+  // Check for session and redirect if not authenticated
+  useEffect(() => {
+  const checkSession = async () => {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    setSession(session); 
+  };
+
+  checkSession();
+
+  const { data: listener } = supabaseClient.auth.onAuthStateChange((_event, session) => {
+    setSession(session);
+    if (!session) router.push('/Login');
+  });
+
+  return () => {
+    listener.subscription.unsubscribe();
+  };
+}, [router]);
+
+  // Fetch vehicles and documents
   async function fetchData() {
+    if (!session) return; // wait until session exists
     setLoading(true);
-    const [docRes, vehicleRes] = await Promise.all([
-      supabase.from('documents').select('*').order('uploaded_at', { ascending: false }),
-      supabase.from('vehicles').select('*'),
-    ]);
-    setLoading(false);
-    if (docRes.data) setDocuments(docRes.data);
-    if (vehicleRes.data) setVehicles(vehicleRes.data);
+    try {
+      // Fetch vehicles
+      const { data: vehicleData, error: vehicleError } = await supabaseClient
+        .from('vehicles')
+        .select('id, registration_number, make');
+      if (vehicleError) throw vehicleError;
+      setVehicles(vehicleData || []);
+
+      // Fetch documents (RLS enforces user access)
+      const { data: docsData, error: docsError } = await supabaseClient
+        .from('documents')
+        .select('*')
+        .order('uploaded_at', { ascending: false });
+      if (docsError) throw docsError;
+
+      const docs = docsData || [];
+
+      // Generate signed URLs for private files
+      const docsWithUrls = await Promise.all(docs.map(async (doc) => {
+        if (!doc.storage_path) return { ...doc, signed_url: null };
+        const { data: urlData, error: urlError } = await supabaseClient.storage
+          .from('Documents_Storage')
+          .createSignedUrl(doc.storage_path, 60);
+        return { ...doc, signed_url: urlError ? null : urlData.signedUrl };
+      }));
+
+      setDocuments(docsWithUrls);
+    } catch (err) {
+      console.error('Error fetching documents:', err);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { if (session) fetchData(); }, [session]);
 
   const getVehicleLabel = (id) => {
     const v = vehicles.find(v => v.id === id);
@@ -56,7 +105,7 @@ export default function DocumentsPage() {
     expiring: documents.filter(d => d.status === 'Expiring Soon').length,
   }), [documents]);
 
-  function exportCSV() {
+  const exportCSV = () => {
     if (!paged || paged.length === 0) { alert('No records to export.'); return; }
     const rows = paged.map(d => {
       const vehicle = vehicles.find(v => v.id === d.vehicle_id) || {};
@@ -67,7 +116,7 @@ export default function DocumentsPage() {
         uploaded_at: d.uploaded_at?.split?.('T')[0] || '',
         expiry_date: d.expiry_date || '',
         status: d.status || '',
-        file_url: d.file_url || '',
+        storage_path: d.storage_path || '',
       };
     });
 
@@ -83,20 +132,18 @@ export default function DocumentsPage() {
     a.download = `documents_export_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }
+  };
 
   return (
     <div className="min-h-screen flex bg-green-50">
       <SideBar />
       <main className="flex-1 p-8">
-
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
           <div>
             <h1 className="text-3xl font-bold text-green-800">Document Repository</h1>
             <p className="text-sm text-green-600">Manage vehicle documents and track expiry dates</p>
           </div>
-
           <div className="flex items-center gap-3">
             <button
               onClick={exportCSV}
@@ -104,7 +151,6 @@ export default function DocumentsPage() {
             >
               <FaDownload className="mr-2" /> Export
             </button>
-
             <button
               onClick={() => setOpenAdd(true)}
               className="flex items-center bg-green-700 text-white px-4 py-2 rounded hover:bg-green-800 transition"
@@ -172,8 +218,16 @@ export default function DocumentsPage() {
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded text-xs font-semibold ${doc.status === 'Current' ? 'bg-green-200 text-green-800' : doc.status === 'Expiring Soon' ? 'bg-yellow-200 text-yellow-800' : 'bg-slate-100 text-slate-600'}`}>{doc.status}</span>
                   </td>
-                  <td className="px-4 py-3"><a href={doc.file_url} target="_blank" rel="noopener noreferrer" className="text-green-700 hover:underline text-sm">View</a></td>
-                  <td className="px-4 py-3"><a href={doc.file_url} download className="text-green-700 hover:underline text-sm">Download</a></td>
+                  <td className="px-4 py-3">
+                    {doc.signed_url ? (
+                      <a href={doc.signed_url} target="_blank" rel="noopener noreferrer" className="text-green-700 hover:underline text-sm">View</a>
+                    ) : '—'}
+                  </td>
+                  <td className="px-4 py-3">
+                    {doc.signed_url ? (
+                      <a href={doc.signed_url} download className="text-green-700 hover:underline text-sm">Download</a>
+                    ) : '—'}
+                  </td>
                 </tr>
               ))}
             </tbody>

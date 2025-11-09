@@ -1,12 +1,17 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { useRouter } from 'next/navigation';
+import { supabaseClient } from '@/lib/supabaseClient';
 import SideBar from '@/components/SideBar';
 import { FaPlus, FaSearch, FaDownload, FaCar, FaTools, FaCheckCircle } from 'react-icons/fa';
 import Modal from '@/components/Modal';
 import VehicleForm from '@/components/Forms/VehicleForm';
 
 export default function VehiclesPage() {
+  const router = useRouter();
+  const [session, setSession] = useState(null);
+  const [loadingSession, setLoadingSession] = useState(true);
+
   const [vehicles, setVehicles] = useState([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -16,14 +21,55 @@ export default function VehiclesPage() {
   const [perPage, setPerPage] = useState(5);
   const [page, setPage] = useState(1);
 
+  // --- Session check ---
+  useEffect(() => {
+    let mounted = true;
+
+    const checkSession = async () => {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!mounted) return;
+
+      setSession(session);
+      setLoadingSession(false);
+
+      if (!session) router.push('/Login');
+    };
+
+    checkSession();
+
+    const { data: listener } = supabaseClient.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      setSession(session);
+      if (!session) router.push('/Login');
+    });
+
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, [router]);
+
+  // --- Fetch vehicles (RLS enforced) ---
   async function fetchVehicles() {
+    if (!session) return;
     setLoading(true);
-    const { data, error } = await supabase.from('vehicles').select('*').order('created_at', { ascending: false });
-    setLoading(false);
-    if (!error) setVehicles(data || []);
+    try {
+      const { data, error } = await supabaseClient
+        .from('vehicles')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setVehicles(data || []);
+    } catch (err) {
+      console.error('Error fetching vehicles:', err.message);
+      setVehicles([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  useEffect(() => { fetchVehicles(); }, []);
+  useEffect(() => { fetchVehicles(); }, [session]);
 
   const departments = useMemo(() => {
     const setDept = new Set();
@@ -76,6 +122,14 @@ export default function VehiclesPage() {
     a.download = `vehicles_export_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  if (loadingSession) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-green-700">Checking session...</p>
+      </div>
+    );
   }
 
   return (
@@ -149,7 +203,6 @@ export default function VehiclesPage() {
             </select>
           </div>
 
-          {/* Rows per page selector */}
           <div className="flex items-center gap-3 mt-2 md:mt-0">
             <span className="text-sm text-green-700">Rows</span>
             <select
@@ -164,28 +217,33 @@ export default function VehiclesPage() {
           </div>
         </div>
 
-        {/* Vehicle Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {loading && <div className="text-green-600 text-center col-span-full py-12">Loading vehicles...</div>}
-          {!loading && paged.length === 0 && <div className="text-green-600 text-center col-span-full py-12">No vehicles found.</div>}
-          {!loading && paged.map(v => (
-            <div key={v.id} className="bg-white p-4 rounded-lg shadow border border-green-100 hover:shadow-lg transition flex flex-col">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-semibold text-green-800 text-lg">{v.registration_number}</h3>
-                <span className={`px-2 py-1 text-xs font-semibold rounded ${
-                  v.status === 'Active' ? 'bg-green-200 text-green-900' :
-                  v.status === 'Maintenance' ? 'bg-yellow-200 text-yellow-900' :
-                  v.status === 'Incident' ? 'bg-red-200 text-red-800' :
-                  'bg-gray-100 text-gray-800'
-                }`}>{v.status}</span>
-              </div>
-              <div className="text-sm text-green-700 mb-1">{v.make} {v.model} ({v.year || '—'})</div>
-              <div className="text-sm text-green-600 mb-1">Odometer: {v.odometer != null ? `${Number(v.odometer).toLocaleString()} km` : '—'}</div>
-              <div className="text-sm text-green-600 mb-1">Fuel: {v.fuel_type || '—'}</div>
-              <div className="text-sm text-green-600">Dept: {v.department || '—'}</div>
-            </div>
-          ))}
-        </div>
+{/* Vehicle Cards */}
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+  {loading && <div className="text-green-600 text-center col-span-full py-12">Loading vehicles...</div>}
+  {!loading && paged.length === 0 && <div className="text-green-600 text-center col-span-full py-12">No vehicles found.</div>}
+  {!loading && paged.map(v => (
+    <div
+      key={v.id}
+      onClick={() => router.push(`./vehicles/${v.id}`)}  
+      className="cursor-pointer bg-white p-4 rounded-lg shadow border border-green-100 hover:shadow-lg hover:border-green-300 transition flex flex-col"
+    >
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="font-semibold text-green-800 text-lg">{v.registration_number}</h3>
+        <span className={`px-2 py-1 text-xs font-semibold rounded ${
+          v.status === 'Active' ? 'bg-green-200 text-green-900' :
+          v.status === 'Maintenance' ? 'bg-yellow-200 text-yellow-900' :
+          v.status === 'Incident' ? 'bg-red-200 text-red-800' :
+          'bg-gray-100 text-gray-800'
+        }`}>{v.status}</span>
+      </div>
+      <div className="text-sm text-green-700 mb-1">{v.make} {v.model} ({v.year || '—'})</div>
+      <div className="text-sm text-green-600 mb-1">Odometer: {v.odometer != null ? `${Number(v.odometer).toLocaleString()} km` : '—'}</div>
+      <div className="text-sm text-green-600 mb-1">Fuel: {v.fuel_type || '—'}</div>
+      <div className="text-sm text-green-600">Dept: {v.department || '—'}</div>
+    </div>
+  ))}
+</div>
+
 
         {/* Pagination */}
         <div className="flex items-center justify-between mt-6">

@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { supabaseClient } from '@/lib/supabaseClient';
 import SideBar from '@/components/SideBar';
 import { FaPlus, FaSearch, FaChevronLeft, FaChevronRight, FaDownload } from 'react-icons/fa';
 import Modal from '@/components/Modal';
@@ -10,26 +10,47 @@ export default function AccidentsPage() {
   const [accidents, setAccidents] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [drivers, setDrivers] = useState([]);
+  const [user, setUser] = useState(null);
   const [openAdd, setOpenAdd] = useState(false);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [perPage, setPerPage] = useState(10);
   const [page, setPage] = useState(1);
 
-  async function fetchData() {
-    setLoading(true);
-    const [accidentRes, vehicleRes, driverRes] = await Promise.all([
-      supabase.from('accidents').select('*').order('date', { ascending: false }),
-      supabase.from('vehicles').select('*'),
-      supabase.from('drivers').select('*'),
-    ]);
-    setLoading(false);
-    if (accidentRes.data) setAccidents(accidentRes.data);
-    if (vehicleRes.data) setVehicles(vehicleRes.data);
-    if (driverRes.data) setDrivers(driverRes.data);
+  // Fetch logged-in user
+  async function fetchUser() {
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    setUser(user);
   }
 
-  useEffect(() => { fetchData(); }, []);
+  // Fetch all accidents, vehicles, drivers
+  async function fetchData() {
+    setLoading(true);
+    try {
+      const [accidentRes, vehicleRes, driverRes] = await Promise.all([
+        supabaseClient.from('accidents').select('*').order('date', { ascending: false }),
+        supabaseClient.from('vehicles').select('*'),
+        supabaseClient.from('drivers').select('*')
+      ]);
+      if (accidentRes.error) throw accidentRes.error;
+      if (vehicleRes.error) throw vehicleRes.error;
+      if (driverRes.error) throw driverRes.error;
+
+      setAccidents(accidentRes.data || []);
+      setVehicles(vehicleRes.data || []);
+      setDrivers(driverRes.data || []);
+    } catch (err) {
+      console.error('Error fetching data:', err.message);
+      alert(`Error fetching data: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchUser();
+    fetchData();
+  }, []);
 
   const getVehicleLabel = (id) => {
     const v = vehicles.find(v => v.id === id);
@@ -106,7 +127,6 @@ export default function AccidentsPage() {
   return (
     <div className="min-h-screen flex bg-green-50">
       <SideBar />
-
       <main className="flex-1 p-8">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">

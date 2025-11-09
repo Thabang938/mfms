@@ -1,15 +1,21 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { useRouter } from 'next/navigation';
+import { supabaseClient } from '@/lib/supabaseClient';
 import SideBar from '@/components/SideBar';
+import Modal from '@/components/Modal';
+import LicenseForm from '@/components/Forms/LicenseForm';
 import {
   FaPlus, FaDownload, FaSearch, FaChevronLeft, FaChevronRight, FaCarSide
 } from 'react-icons/fa';
-import Modal from '@/components/Modal';
-import LicenseForm from '@/components/Forms/LicenseForm';
 import dayjs from 'dayjs';
 
 export default function LicensesPage() {
+  const router = useRouter();
+
+  // -------------------- States --------------------
+  const [session, setSession] = useState(null);
+  const [loadingSession, setLoadingSession] = useState(true);
   const [licenses, setLicenses] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [openAdd, setOpenAdd] = useState(false);
@@ -18,25 +24,87 @@ export default function LicensesPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [perPage, setPerPage] = useState(6);
   const [page, setPage] = useState(1);
+  const [userRole, setUserRole] = useState(null);
 
-  async function fetchData() {
+  // -------------------- Session --------------------
+  useEffect(() => {
+    let mounted = true;
+
+    const checkSession = async () => {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!mounted) return;
+      setSession(session);
+      setLoadingSession(false);
+      if (!session) router.push('/Login');
+    };
+
+    checkSession();
+
+    const { data: listener } = supabaseClient.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      setSession(session);
+      if (!session) router.push('/Login');
+    });
+
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, [router]);
+
+  // -------------------- Fetch Data --------------------
+  const fetchData = async () => {
+    if (!session) return;
     setLoading(true);
-    const [licenseRes, vehicleRes] = await Promise.all([
-      supabase.from('licenses').select('*').order('expiry_date', { ascending: true }),
-      supabase.from('vehicles').select('*'),
-    ]);
-    setLoading(false);
-    if (licenseRes.data) setLicenses(licenseRes.data);
-    if (vehicleRes.data) setVehicles(vehicleRes.data);
-  }
+    try {
+      // Get user info
+      const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+      if (userError) throw userError;
 
-  useEffect(() => { fetchData(); }, []);
+      const { data: profile, error: profileError } = await supabaseClient
+        .from('users')
+        .select('role')
+        .eq('auth_id', user.id)
+        .single();
+      if (profileError) throw profileError;
+      setUserRole(profile?.role || 'User');
 
+      // Fetch licenses
+      let licenseQuery = supabaseClient.from('licenses').select('*').order('expiry_date', { ascending: true });
+      if (!['Fleet Manager', 'Admin Clerk'].includes(profile?.role)) {
+        licenseQuery = licenseQuery.eq('user_id', user.id); // RLS for regular users
+      }
+      const licenseRes = await licenseQuery;
+
+      // Fetch vehicles
+      const vehicleRes = await supabaseClient.from('vehicles').select('*');
+
+      setLicenses(licenseRes.data || []);
+      setVehicles(vehicleRes.data || []);
+    } catch (err) {
+      console.error('Error fetching licenses:', err.message);
+      setLicenses([]);
+      setVehicles([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (session) fetchData();
+  }, [session]);
+
+  // -------------------- Helpers --------------------
   const getRawDaysLeft = (expiry) => expiry ? dayjs(expiry).diff(dayjs(), 'day') : null;
   const getDaysLeft = (expiry) => {
     const raw = getRawDaysLeft(expiry);
     if (raw == null) return '—';
     return Math.max(0, raw);
+  };
+
+  const getVehicleLabel = (id) => {
+    const v = vehicles.find(v => v.id === id);
+    return v ? `${v.make || ''} ${v.model || ''}`.trim() : 'Unknown';
   };
 
   const expiredCount = useMemo(() => licenses.filter(l => getRawDaysLeft(l.expiry_date) < 0).length, [licenses]);
@@ -46,8 +114,9 @@ export default function LicensesPage() {
   }).length, [licenses]);
   const currentCount = useMemo(() => licenses.filter(l => getRawDaysLeft(l.expiry_date) > 14).length, [licenses]);
 
+  // -------------------- Filter & Search --------------------
   const filtered = useMemo(() => {
-    let list = licenses.slice();
+    let list = [...licenses];
     if (statusFilter) {
       list = list.filter(l => {
         const raw = getRawDaysLeft(l.expiry_date);
@@ -75,7 +144,8 @@ export default function LicensesPage() {
   useEffect(() => { if (page > pageCount) setPage(1); }, [pageCount]);
   const paged = useMemo(() => filtered.slice((page - 1) * perPage, page * perPage), [filtered, page, perPage]);
 
-  function exportCSV() {
+  // -------------------- CSV Export --------------------
+  const exportCSV = () => {
     if (!paged || paged.length === 0) { alert('No records to export.'); return; }
     const rows = paged.map(l => {
       const vehicle = vehicles.find(v => v.id === l.vehicle_id) || {};
@@ -107,8 +177,17 @@ export default function LicensesPage() {
     a.download = `licenses_export_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  if (loadingSession) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-green-700">Checking session...</p>
+      </div>
+    );
   }
 
+  // -------------------- Render --------------------
   return (
     <div className="min-h-screen flex bg-green-50">
       <SideBar />
@@ -122,16 +201,10 @@ export default function LicensesPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              onClick={exportCSV}
-              className="flex items-center bg-white border border-green-300 text-green-700 px-4 py-2 rounded-md hover:bg-green-100 transition"
-            >
+            <button onClick={exportCSV} className="flex items-center bg-white border border-green-300 text-green-700 px-4 py-2 rounded-md hover:bg-green-100 transition">
               <FaDownload className="mr-2" /> Export
             </button>
-            <button
-              onClick={() => setOpenAdd(true)}
-              className="flex items-center bg-green-700 text-white px-4 py-2 rounded-md hover:bg-green-800 transition"
-            >
+            <button onClick={() => setOpenAdd(true)} className="flex items-center bg-green-700 text-white px-4 py-2 rounded-md hover:bg-green-800 transition">
               <FaPlus className="mr-2" /> Record Renewal
             </button>
           </div>
@@ -140,9 +213,9 @@ export default function LicensesPage() {
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <StatCard label="Total Licenses" value={licenses.length} color="text-green-900" />
-          <StatCard label="Expired" value={expiredCount} color="text-green-900" />
-          <StatCard label="Due Soon" value={dueSoonCount} color="text-green-900" />
-          <StatCard label="Current" value={currentCount} color="text-green-900" />
+          <StatCard label="Expired" value={expiredCount} color="text-red-700" />
+          <StatCard label="Due Soon" value={dueSoonCount} color="text-orange-700" />
+          <StatCard label="Current" value={currentCount} color="text-blue-700" />
         </div>
 
         {/* Filters */}
@@ -172,105 +245,87 @@ export default function LicensesPage() {
           </div>
         </div>
 
-        {/* License Cards */}
-        {loading && (
-          <div className="text-center text-green-600 py-12">Loading licenses...</div>
-        )}
-        {!loading && paged.length === 0 && (
-          <div className="text-center text-green-600 py-12">No license records found.</div>
-        )}
-        {!loading && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {paged.map((l, i) => {
-              const vehicle = vehicles.find(v => v.id === l.vehicle_id);
-              const raw = getRawDaysLeft(l.expiry_date);
-              const daysLeft = getDaysLeft(l.expiry_date);
-              const statusLabel = (typeof raw === 'number')
-                ? (raw < 0 ? 'Expired' : raw <= 14 ? 'Due Soon' : 'Current')
-                : '—';
-              const statusColor = statusLabel === 'Expired'
-                ? 'bg-red-100 text-red-800'
-                : statusLabel === 'Due Soon'
-                  ? 'bg-orange-100 text-orange-800'
-                  : 'bg-blue-100 text-blue-800';
+      {/* -------------------- Updated License Cards -------------------- */}
+{!loading && (
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    {paged.map((l, i) => {
+      const vehicle = vehicles.find(v => v.id === l.vehicle_id);
+      const raw = getRawDaysLeft(l.expiry_date);
+      const daysLeft = getDaysLeft(l.expiry_date);
+      const statusLabel = (typeof raw === 'number')
+        ? (raw < 0 ? 'Expired' : raw <= 14 ? 'Due Soon' : 'Current')
+        : '—';
+      const statusColor = statusLabel === 'Expired'
+        ? 'bg-red-100 text-red-800'
+        : statusLabel === 'Due Soon'
+          ? 'bg-orange-100 text-orange-800'
+          : 'bg-blue-100 text-blue-800';
 
-              return (
-                <div
-                  key={l.id || i}
-                  className="bg-white border border-green-100 rounded-xl shadow-sm hover:shadow-md transition p-5 flex flex-col gap-3"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="bg-green-100 text-green-700 p-3 rounded-full">
-                        <FaCarSide />
-                      </div>
-                      <div>
-                        <h2 className="text-lg font-semibold text-green-900">
-                          {vehicle ? `${vehicle.make} ${vehicle.model}` : 'Unknown Vehicle'}
-                        </h2>
-                        <p className="text-sm text-green-700">{vehicle?.registration_number || '—'}</p>
-                      </div>
-                    </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${statusColor}`}>
-                      {statusLabel}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-y-2 text-sm text-green-700 mt-2">
-                    <div>Expiry Date:</div>
-                    <div className="font-medium text-green-900">{l.expiry_date || '—'}</div>
-
-                    <div>Days Left:</div>
-                    <div className="font-medium text-green-900">
-                      {typeof daysLeft === 'number' ? `${daysLeft} days` : '—'}
-                    </div>
-
-                    <div>Renewal Cost:</div>
-                    <div className="font-medium text-green-900">
-                      R {l.renewal_cost?.toLocaleString() || '—'}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+      return (
+        <div
+          key={l.id || i}
+          className="bg-white border border-green-100 rounded-xl shadow-sm hover:shadow-md transition p-5 flex flex-col gap-3 cursor-pointer"
+          onClick={() => router.push(`./licenses/${l.id}`)}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="bg-green-100 text-green-700 p-3 rounded-full">
+                <FaCarSide />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-green-900">
+                  {vehicle ? `${vehicle.make} ${vehicle.model}` : 'Unknown Vehicle'}
+                </h2>
+                <p className="text-sm text-green-700">{vehicle?.registration_number || '—'}</p>
+              </div>
+            </div>
+            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${statusColor}`}>
+              {statusLabel}
+            </span>
           </div>
-        )}
+
+          <div className="grid grid-cols-2 gap-y-2 text-sm text-green-700 mt-2">
+            <div>Expiry Date:</div>
+            <div className="font-medium text-green-900">{l.expiry_date || '—'}</div>
+
+            <div>Days Left:</div>
+            <div className="font-medium text-green-900">{typeof daysLeft === 'number' ? `${daysLeft} days` : '—'}</div>
+
+            <div>Renewal Cost:</div>
+            <div className="font-medium text-green-900">R {l.renewal_cost?.toLocaleString() || '—'}</div>
+          </div>
+        </div>
+      );
+    })}
+  </div>
+)}
+
 
         {/* Pagination */}
         {!loading && total > 0 && (
           <div className="flex items-center justify-between px-2 py-6 mt-6 border-t border-green-100">
             <div className="flex items-center gap-3">
-              <button
-                className="px-3 py-1 border rounded bg-white text-green-700 disabled:opacity-40 flex items-center gap-2"
+              <button className="px-3 py-1 border rounded bg-white text-green-700 disabled:opacity-40 flex items-center gap-2"
                 onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-              >
+                disabled={page === 1}>
                 <FaChevronLeft /> Prev
               </button>
               <div className="text-sm text-green-900 font-medium">Page {page} / {pageCount}</div>
-              <button
-                className="px-3 py-1 border rounded bg-white text-green-700 disabled:opacity-40 flex items-center gap-2"
+              <button className="px-3 py-1 border rounded bg-white text-green-700 disabled:opacity-40 flex items-center gap-2"
                 onClick={() => setPage(p => Math.min(pageCount, p + 1))}
-                disabled={page === pageCount}
-              >
+                disabled={page === pageCount}>
                 Next <FaChevronRight />
               </button>
             </div>
 
             <div className="flex items-center gap-3">
               <div className="text-sm text-green-700">Rows</div>
-              <select
-                className="px-2 py-1 border rounded"
-                value={perPage}
-                onChange={e => { setPerPage(Number(e.target.value)); setPage(1); }}
-              >
+              <select className="px-2 py-1 border rounded" value={perPage} onChange={e => { setPerPage(Number(e.target.value)); setPage(1); }}>
                 <option value={6}>6</option>
                 <option value={12}>12</option>
                 <option value={24}>24</option>
               </select>
-              <div className="text-sm text-green-600">
-                Total: <span className="font-medium text-green-800">{total}</span>
-              </div>
+              <div className="text-sm text-green-600">Total: <span className="font-medium text-green-800">{total}</span></div>
             </div>
           </div>
         )}
@@ -284,6 +339,7 @@ export default function LicensesPage() {
   );
 }
 
+// -------------------- StatCard Component --------------------
 function StatCard({ label, value, color }) {
   return (
     <div className="bg-white p-4 rounded-lg border border-green-100 shadow-sm text-center hover:shadow-md transition">

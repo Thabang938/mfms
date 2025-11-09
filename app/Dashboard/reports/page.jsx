@@ -1,11 +1,10 @@
-// ...existing code...
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import SideBar from '@/components/SideBar';
 import Modal from '@/components/Modal';
-import { supabase } from '@/lib/supabaseClient';
+import { supabaseClient } from '@/lib/supabaseClient';
 import { formatCurrency } from '@/lib/utils';
-import { FaFileExport, FaEye } from 'react-icons/fa';
+import { FaFileExport } from 'react-icons/fa';
 import { Line, Bar } from 'react-chartjs-2';
 import 'chart.js/auto';
 
@@ -59,11 +58,10 @@ export default function ReportsPage() {
     }
   }
 
-  // Service history: list services with vehicle label
   async function loadServiceHistory(from, to) {
     const [{ data: services = [] }, { data: vehicles = [] }] = await Promise.all([
-      supabase.from('services').select('*').gte('service_date', from).lte('service_date', to).order('service_date', { ascending: false }),
-      supabase.from('vehicles').select('id, registration_number, make, model'),
+      supabaseClient.from('services').select('*').gte('service_date', from).lte('service_date', to).order('service_date', { ascending: false }),
+      supabaseClient.from('vehicles').select('id, registration_number, make, model'),
     ]);
     const vehMap = Object.fromEntries((vehicles || []).map(v => [v.id, v]));
     const rows = (services || []).map(s => ({
@@ -80,11 +78,10 @@ export default function ReportsPage() {
     setMeta({ total: rows.length, totalCost: rows.reduce((a, b) => a + (Number(b.cost) || 0), 0) });
   }
 
-  // Cost analysis: maintenance vs fuel
   async function loadCostAnalysis(from, to) {
     const [servicesRes, fuelRes] = await Promise.all([
-      supabase.from('services').select('*').gte('service_date', from).lte('service_date', to),
-      supabase.from('fuel_logs').select('*').gte('purchase_date', from).lte('purchase_date', to),
+      supabaseClient.from('services').select('*').gte('service_date', from).lte('service_date', to),
+      supabaseClient.from('fuel_logs').select('*').gte('purchase_date', from).lte('purchase_date', to),
     ]);
     const services = servicesRes.data || [];
     const fuel = fuelRes.data || [];
@@ -97,9 +94,8 @@ export default function ReportsPage() {
     setMeta({ serviceCost, fuelCost, total: serviceCost + fuelCost });
   }
 
-  // Accident trends: counts per month, severity summary
   async function loadAccidentTrends(from, to) {
-    const res = await supabase.from('accidents').select('*').gte('date', from).lte('date', to).order('date', { ascending: false });
+    const res = await supabaseClient.from('accidents').select('*').gte('date', from).lte('date', to).order('date', { ascending: false });
     const accidents = res.data || [];
     const byMonth = {};
     const statusCounts = {};
@@ -113,11 +109,10 @@ export default function ReportsPage() {
     setMeta({ total: accidents.length, statusCounts });
   }
 
-  // Tyre usage: replacements grouped by vehicle and condition
   async function loadTyreUsage(from, to) {
     const [tiresRes, vehiclesRes] = await Promise.all([
-      supabase.from('tires').select('*').gte('install_date', from).lte('install_date', to).order('install_date', { ascending: false }),
-      supabase.from('vehicles').select('id, registration_number'),
+      supabaseClient.from('tires').select('*').gte('install_date', from).lte('install_date', to).order('install_date', { ascending: false }),
+      supabaseClient.from('vehicles').select('id, registration_number'),
     ]);
     const tires = tiresRes.data || [];
     const vehicles = vehiclesRes.data || [];
@@ -136,11 +131,10 @@ export default function ReportsPage() {
     setMeta({ total: rows.length, byCondition: rows.reduce((acc, r) => { acc[r.condition] = (acc[r.condition] || 0) + 1; return acc; }, {}) });
   }
 
-  // License compliance
   async function loadLicenseCompliance(from, to) {
     const [licensesRes, vehiclesRes] = await Promise.all([
-      supabase.from('licenses').select('*').gte('expiry_date', from).lte('expiry_date', to).order('expiry_date', { ascending: true }),
-      supabase.from('vehicles').select('id, registration_number'),
+      supabaseClient.from('licenses').select('*').gte('expiry_date', from).lte('expiry_date', to).order('expiry_date', { ascending: true }),
+      supabaseClient.from('vehicles').select('id, registration_number'),
     ]);
     const licenses = licensesRes.data || [];
     const vehicles = vehiclesRes.data || [];
@@ -150,11 +144,10 @@ export default function ReportsPage() {
     setMeta({ total: rows.length, expiringThisPeriod: rows.length });
   }
 
-  // Fuel efficiency: avg liters per km (if odometer present)
   async function loadFuelEfficiency(from, to) {
     const [fuelRes, servicesRes] = await Promise.all([
-      supabase.from('fuel_logs').select('*').gte('purchase_date', from).lte('purchase_date', to),
-      supabase.from('services').select('*').gte('service_date', from).lte('service_date', to),
+      supabaseClient.from('fuel_logs').select('*').gte('purchase_date', from).lte('purchase_date', to),
+      supabaseClient.from('services').select('*').gte('service_date', from).lte('service_date', to),
     ]);
     const fuel = fuelRes.data || [];
     const services = servicesRes.data || [];
@@ -164,12 +157,11 @@ export default function ReportsPage() {
     setMeta({ totalLiters, totalFuelCost, fuelRecords: fuel.length, serviceRecords: services.length });
   }
 
-  // Driver performance: simple counts (incidents, services)
   async function loadDriverPerformance(from, to) {
     const [driversRes, accidentsRes, servicesRes] = await Promise.all([
-      supabase.from('drivers').select('*'),
-      supabase.from('accidents').select('*').gte('date', from).lte('date', to),
-      supabase.from('services').select('*').gte('service_date', from).lte('service_date', to),
+      supabaseClient.from('drivers').select('*'),
+      supabaseClient.from('accidents').select('*').gte('date', from).lte('date', to),
+      supabaseClient.from('services').select('*').gte('service_date', from).lte('service_date', to),
     ]);
     const drivers = driversRes.data || [];
     const accidents = accidentsRes.data || [];
@@ -188,12 +180,11 @@ export default function ReportsPage() {
     setMeta({ drivers: drivers.length });
   }
 
-  // Vehicle utilization: number of services, fuel entries per vehicle
   async function loadVehicleUtilization(from, to) {
     const [vehiclesRes, servicesRes, fuelRes] = await Promise.all([
-      supabase.from('vehicles').select('*'),
-      supabase.from('services').select('*').gte('service_date', from).lte('service_date', to),
-      supabase.from('fuel_logs').select('*').gte('purchase_date', from).lte('purchase_date', to),
+      supabaseClient.from('vehicles').select('*'),
+      supabaseClient.from('services').select('*').gte('service_date', from).lte('service_date', to),
+      supabaseClient.from('fuel_logs').select('*').gte('purchase_date', from).lte('purchase_date', to),
     ]);
     const vehicles = vehiclesRes.data || [];
     const services = servicesRes.data || [];
@@ -222,7 +213,6 @@ export default function ReportsPage() {
     URL.revokeObjectURL(url);
   }
 
-  // chart data memoized for performance
   const chartConfig = useMemo(() => {
     if (active === 'accident_trends' && reportData.length) {
       const labels = reportData.map(r => r.period);
@@ -355,7 +345,7 @@ export default function ReportsPage() {
             )}
           </div>
 
-          {/* chart area (shadcn-like card) */}
+          {/* chart area */}
           {chartConfig ? (
             <div className="p-4 rounded border border-green-100 bg-white mb-4">
               <div className="h-72">
@@ -419,4 +409,3 @@ export default function ReportsPage() {
     </div>
   );
 }
-// ...existing code...

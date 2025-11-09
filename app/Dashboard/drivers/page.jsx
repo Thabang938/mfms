@@ -1,12 +1,17 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { useRouter } from 'next/navigation';
+import { supabaseClient } from '@/lib/supabaseClient';
 import SideBar from '@/components/SideBar';
 import { FaPlus, FaSearch, FaChevronLeft, FaChevronRight, FaFileExport, FaUser } from 'react-icons/fa';
 import Modal from '@/components/Modal';
 import DriverForm from '@/components/Forms/DriverForm';
 
 export default function DriversPage() {
+  const router = useRouter();
+  const [session, setSession] = useState(null);
+  const [loadingSession, setLoadingSession] = useState(true);
+
   const [drivers, setDrivers] = useState([]);
   const [users, setUsers] = useState([]);
   const [vehicles, setVehicles] = useState([]);
@@ -20,20 +25,65 @@ export default function DriversPage() {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(5);
 
+  // --- Session check (avoid flash redirect) ---
+useEffect(() => {
+  const checkSession = async () => {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    setSession(session); // No redirect here
+    setLoadingSession(false);
+  };
+
+  checkSession();
+
+  const { data: listener } = supabaseClient.auth.onAuthStateChange((_event, session) => {
+    setSession(session);
+    if (!session) router.push('/Login');
+  });
+
+  return () => {
+    listener.subscription.unsubscribe();
+  };
+}, [router]);
+
+  // --- Fetch data (drivers + users + vehicles) ---
   async function fetchData() {
+    if (!session) return;
     setLoading(true);
-    const [driverRes, userRes, vehicleRes] = await Promise.all([
-      supabase.from('drivers').select('*'),
-      supabase.from('users').select('*').eq('role', 'Driver'),
-      supabase.from('vehicles').select('*'),
-    ]);
-    setLoading(false);
-    if (driverRes.data) setDrivers(driverRes.data);
-    if (userRes.data) setUsers(userRes.data);
-    if (vehicleRes.data) setVehicles(vehicleRes.data);
+
+    try {
+      // Vehicles
+      const { data: vehicleData, error: vehicleError } = await supabaseClient
+        .from('vehicles')
+        .select('id, registration_number, make');
+      if (vehicleError) throw vehicleError;
+      setVehicles(vehicleData || []);
+
+      // Users with role Driver
+      const { data: userData, error: userError } = await supabaseClient
+        .from('users')
+        .select('id, name')
+        .eq('role', 'Driver');
+      if (userError) throw userError;
+      setUsers(userData || []);
+
+      // Drivers (RLS enforced)
+      const { data: driverData, error: driverError } = await supabaseClient
+        .from('drivers')
+        .select('*')
+        .order('license_number', { ascending: true });
+      if (driverError) throw driverError;
+      setDrivers(driverData || []);
+    } catch (err) {
+      console.error('Error fetching drivers:', err.message);
+      setDrivers([]);
+      setUsers([]);
+      setVehicles([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [session]);
 
   const getUserName = (id) => users.find(u => u.id === id)?.name || 'Unknown';
   const getVehicleLabel = (id) => {
@@ -82,7 +132,6 @@ export default function DriversPage() {
   }, [filtered, page, perPage]);
 
   const handleExport = () => {
-    // Simple CSV export
     const headers = ['Driver Name', 'License', 'Department', 'Vehicle', 'Status'];
     const rows = filtered.map(d => [
       getUserName(d.user_id),
@@ -114,7 +163,7 @@ export default function DriversPage() {
           </div>
 
           <div className="flex gap-3">
-             <button onClick={handleExport} className="flex items-center gap-2 bg-white border border-green-700 text-green-700 px-4 py-2 rounded hover:bg-green-100 transition">
+            <button onClick={handleExport} className="flex items-center gap-2 bg-white border border-green-700 text-green-700 px-4 py-2 rounded hover:bg-green-100 transition">
               <FaFileExport /> Export
             </button>
             <button onClick={() => setOpenAdd(true)} className="flex items-center gap-2 bg-green-700 text-white px-4 py-2 rounded hover:bg-green-800 transition">
@@ -157,27 +206,35 @@ export default function DriversPage() {
           </select>
         </div>
 
-        {/* Driver Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {loading && <div className="col-span-full text-center text-green-600 py-12">Loading drivers...</div>}
-          {!loading && paged.length === 0 && <div className="col-span-full text-center text-green-600 py-12">No drivers found.</div>}
-          {!loading && paged.map((d, i) => (
-            <div key={d.id || i} className="bg-white border border-green-200 rounded-lg p-4 shadow hover:shadow-lg transition flex flex-col">
-              <div className="flex items-center justify-between mb-2">
-                <div className="text-green-700 font-semibold">{getUserName(d.user_id)}</div>
-                <FaUser className="text-green-500 text-xl" />
-              </div>
-              <div className="text-sm text-green-600 mb-1">License: {d.license_number || '—'}</div>
-              <div className="text-sm text-green-600 mb-1">Department: {d.department || '—'}</div>
-              <div className="text-sm text-green-600 mb-1">Vehicle: {getVehicleLabel(d.assigned_vehicle_id)}</div>
-              <span className={`mt-2 px-2 py-1 rounded text-xs font-semibold ${
-                d.status === 'Active' ? 'bg-green-200 text-green-800' :
-                d.status === 'In Training' ? 'bg-yellow-200 text-yellow-800' :
-                'bg-gray-200 text-gray-800'
-              }`}>{d.status || '—'}</span>
-            </div>
-          ))}
-        </div>
+ {/* Driver Cards */}
+<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+  {loading && <div className="col-span-full text-center text-green-600 py-12">Loading drivers...</div>}
+  {!loading && paged.length === 0 && <div className="col-span-full text-center text-green-600 py-12">No drivers found.</div>}
+  {!loading && paged.map((d, i) => (
+    <div
+      key={d.id || i}
+      className="bg-white border border-green-200 rounded-lg p-4 shadow hover:shadow-lg transition flex flex-col cursor-pointer"
+      onClick={() => router.push(`./drivers/${d.id}`)}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-green-700 font-semibold">{d.user?.name || 'Unknown'}</div>
+        {d.user?.user_image 
+          ? <img src={d.user.user_image} alt={d.user.name} className="w-8 h-8 rounded-full object-cover" />
+          : <FaUser className="text-green-500 text-xl" />}
+      </div>
+      <div className="text-sm text-green-600 mb-1">License: {d.license_number || '—'}</div>
+      <div className="text-sm text-green-600 mb-1">Department: {d.department || '—'}</div>
+      <div className="text-sm text-green-600 mb-1">Vehicle: {getVehicleLabel(d.assigned_vehicle_id)}</div>
+      <span className={`mt-2 px-2 py-1 rounded text-xs font-semibold ${
+        d.status === 'Active' ? 'bg-green-200 text-green-800' :
+        d.status === 'In Training' ? 'bg-yellow-200 text-yellow-800' :
+        d.status === 'Suspended' ? 'bg-red-200 text-red-800' :
+        'bg-gray-200 text-gray-800'
+      }`}>{d.status || '—'}</span>
+    </div>
+  ))}
+</div>
+
 
         {/* Pagination Controls */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mt-6">
