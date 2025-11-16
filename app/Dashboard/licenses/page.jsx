@@ -213,9 +213,9 @@ export default function LicensesPage() {
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <StatCard label="Total Licenses" value={licenses.length} color="text-green-900" />
-          <StatCard label="Expired" value={expiredCount} color="text-red-700" />
-          <StatCard label="Due Soon" value={dueSoonCount} color="text-orange-700" />
-          <StatCard label="Current" value={currentCount} color="text-blue-700" />
+          <StatCard label="Expired" value={expiredCount} color="text-green-900" />
+          <StatCard label="Due Soon" value={dueSoonCount} color="text-green-900" />
+          <StatCard label="Current" value={currentCount} color="text-green-900" />
         </div>
 
         {/* Filters */}

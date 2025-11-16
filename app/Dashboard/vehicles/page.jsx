@@ -1,11 +1,14 @@
+// ...existing code...
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabaseClient } from '@/lib/supabaseClient';
 import SideBar from '@/components/SideBar';
-import { FaPlus, FaSearch, FaDownload, FaCar, FaTools, FaCheckCircle } from 'react-icons/fa';
+import { FaPlus, FaSearch, FaDownload } from 'react-icons/fa';
 import Modal from '@/components/Modal';
 import VehicleForm from '@/components/Forms/VehicleForm';
+import { Bar, Pie } from 'react-chartjs-2';
+import 'chart.js/auto';
 
 export default function VehiclesPage() {
   const router = useRouter();
@@ -24,25 +27,19 @@ export default function VehiclesPage() {
   // --- Session check ---
   useEffect(() => {
     let mounted = true;
-
     const checkSession = async () => {
       const { data: { session } } = await supabaseClient.auth.getSession();
       if (!mounted) return;
-
       setSession(session);
       setLoadingSession(false);
-
       if (!session) router.push('/Login');
     };
-
     checkSession();
-
     const { data: listener } = supabaseClient.auth.onAuthStateChange((_event, session) => {
       if (!mounted) return;
       setSession(session);
       if (!session) router.push('/Login');
     });
-
     return () => {
       mounted = false;
       listener.subscription.unsubscribe();
@@ -58,7 +55,6 @@ export default function VehiclesPage() {
         .from('vehicles')
         .select('*')
         .order('created_at', { ascending: false });
-
       if (error) throw error;
       setVehicles(data || []);
     } catch (err) {
@@ -77,12 +73,25 @@ export default function VehiclesPage() {
     return Array.from(setDept).sort();
   }, [vehicles]);
 
-  const stats = useMemo(() => ({
-    total: vehicles.length,
-    maintenance: vehicles.filter(v => v.status === 'Maintenance').length,
-    active: vehicles.filter(v => v.status === 'Active').length,
-  }), [vehicles]);
+  // --- Stats for summary cards ---
+  const stats = useMemo(() => {
+    const total = vehicles.length;
+    const maintenance = vehicles.filter(v => v.status === 'Maintenance').length;
+    const active = vehicles.filter(v => v.status === 'Active').length;
+    const retired = vehicles.filter(v => v.status === 'Retired').length;
+    const incident = vehicles.filter(v => v.status === 'Incident').length;
+    const statusCounts = vehicles.reduce((acc, v) => {
+      acc[v.status] = (acc[v.status] || 0) + 1;
+      return acc;
+    }, {});
+    const deptCounts = vehicles.reduce((acc, v) => {
+      if (v.department) acc[v.department] = (acc[v.department] || 0) + 1;
+      return acc;
+    }, {});
+    return { total, maintenance, active, retired, incident, statusCounts, deptCounts };
+  }, [vehicles]);
 
+  // --- Filtered vehicles ---
   const filtered = useMemo(() => {
     let list = vehicles.slice();
     if (search.trim()) {
@@ -124,6 +133,54 @@ export default function VehiclesPage() {
     URL.revokeObjectURL(url);
   }
 
+  // --- Chart Data (green / white theme) ---
+  const statusPieData = useMemo(() => {
+    const labels = Object.keys(stats.statusCounts);
+    const data = labels.map(l => stats.statusCounts[l]);
+    const palette = ['#166534', '#16a34a', '#34d399', '#86efac', '#bbf7d0'];
+    return {
+      labels,
+      datasets: [{
+        data,
+        backgroundColor: labels.map((_, i) => palette[i % palette.length]),
+        borderColor: '#ffffff',
+        borderWidth: 1,
+      }],
+    };
+  }, [stats.statusCounts]);
+
+  const deptBarData = useMemo(() => {
+    const labels = Object.keys(stats.deptCounts);
+    const data = labels.map(l => stats.deptCounts[l]);
+    const shades = ['#16a34a', '#34d399', '#86efac', '#bbf7d0', '#a7f3d0'];
+    return {
+      labels,
+      datasets: [{
+        label: 'Vehicles',
+        data,
+        backgroundColor: labels.map((_, i) => shades[i % shades.length]),
+        borderRadius: 6,
+        barThickness: 18,
+      }],
+    };
+  }, [stats.deptCounts]);
+
+  const chartOptions = {
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#f0fff4',
+        titleColor: '#064e3b',
+        bodyColor: '#064e3b'
+      }
+    },
+    maintainAspectRatio: false,
+    scales: {
+      x: { ticks: { color: '#065f46' }, grid: { display: false } },
+      y: { ticks: { color: '#065f46' }, grid: { color: 'rgba(16,185,129,0.08)' } },
+    },
+  };
+
   if (loadingSession) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -150,7 +207,6 @@ export default function VehiclesPage() {
             >
               <FaDownload className="mr-2" /> Export
             </button>
-
             <button
               onClick={() => setOpenAdd(true)}
               className="flex items-center bg-green-700 text-white px-4 py-2 rounded hover:bg-green-800 transition"
@@ -160,11 +216,68 @@ export default function VehiclesPage() {
           </div>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <StatCard title="Total Vehicles" value={stats.total} icon={<FaCar />} />
-          <StatCard title="In Maintenance" value={stats.maintenance} icon={<FaTools />} />
-          <StatCard title="Active Vehicles" value={stats.active} icon={<FaCheckCircle />} />
+        {/* Enhanced Summary Cards with Graphs (Total Vehicles card now only shows a pie chart) */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white p-4 rounded-lg border border-green-100 shadow-sm flex flex-col items-center justify-center">
+            <div className="text-sm text-green-700 mb-2">Fleet Status</div>
+            <div className="w-full h-40">
+              {/* TOTAL VEHICLES: only pie chart (no large numeric) */}
+              <Pie data={statusPieData} options={{ ...chartOptions, plugins: { legend: { position: 'bottom', labels: { color: '#064e3b' } } } }} />
+            </div>
+            <div className="text-xs text-green-600 mt-3">Distribution by status</div>
+          </div>
+
+          <div className="bg-white p-4 rounded-lg border border-green-100 shadow-sm flex flex-col items-center justify-center">
+            <div className="text-sm text-green-700 mb-1">Active Vehicles</div>
+            <div className="text-2xl font-bold text-green-900 mb-2">{stats.active}</div>
+            <div className="w-full h-32">
+              <Bar data={{
+                labels: ['Active', 'Retired', 'Incident', 'Maintenance'],
+                datasets: [{
+                  label: 'Count',
+                  data: [
+                    stats.active,
+                    stats.retired,
+                    stats.incident,
+                    stats.maintenance,
+                  ],
+                  backgroundColor: ['#16a34a', '#bbf7d0', '#86efac', '#bbf7d0'],
+                  borderColor: '#ffffff',
+                  barThickness: 18,
+                }],
+              }} options={chartOptions} />
+            </div>
+            <div className="text-xs text-green-600 mt-2">Fleet status overview</div>
+          </div>
+
+          <div className="bg-white p-4 rounded-lg border border-green-100 shadow-sm flex flex-col items-center justify-center">
+            <div className="text-sm text-green-700 mb-1">In Maintenance</div>
+            <div className="text-2xl font-bold text-green-900 mb-2">{stats.maintenance}</div>
+            <div className="w-full h-32">
+              <Bar data={{
+                labels: Object.keys(stats.deptCounts),
+                datasets: [{
+                  label: 'Maintenance',
+                  data: Object.keys(stats.deptCounts).map(dep =>
+                    vehicles.filter(v => v.department === dep && v.status === 'Maintenance').length
+                  ),
+                  backgroundColor: Object.keys(stats.deptCounts).map((_, i) => ['#bbf7d0', '#86efac', '#34d399', '#16a34a'][i % 4]),
+                  borderRadius: 6,
+                  barThickness: 18,
+                }],
+              }} options={chartOptions} />
+            </div>
+            <div className="text-xs text-green-600 mt-2">Maintenance by department</div>
+          </div>
+
+          <div className="bg-white p-4 rounded-lg border border-green-100 shadow-sm flex flex-col items-center justify-center">
+            <div className="text-sm text-green-700 mb-1">By Department</div>
+            <div className="text-2xl font-bold text-green-900 mb-2">{Object.keys(stats.deptCounts).length}</div>
+            <div className="w-full h-32">
+              <Bar data={deptBarData} options={chartOptions} />
+            </div>
+            <div className="text-xs text-green-600 mt-2">Department distribution</div>
+          </div>
         </div>
 
         {/* Filters & Search */}
@@ -217,33 +330,32 @@ export default function VehiclesPage() {
           </div>
         </div>
 
-{/* Vehicle Cards */}
-<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-  {loading && <div className="text-green-600 text-center col-span-full py-12">Loading vehicles...</div>}
-  {!loading && paged.length === 0 && <div className="text-green-600 text-center col-span-full py-12">No vehicles found.</div>}
-  {!loading && paged.map(v => (
-    <div
-      key={v.id}
-      onClick={() => router.push(`./vehicles/${v.id}`)}  
-      className="cursor-pointer bg-white p-4 rounded-lg shadow border border-green-100 hover:shadow-lg hover:border-green-300 transition flex flex-col"
-    >
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="font-semibold text-green-800 text-lg">{v.registration_number}</h3>
-        <span className={`px-2 py-1 text-xs font-semibold rounded ${
-          v.status === 'Active' ? 'bg-green-200 text-green-900' :
-          v.status === 'Maintenance' ? 'bg-yellow-200 text-yellow-900' :
-          v.status === 'Incident' ? 'bg-red-200 text-red-800' :
-          'bg-gray-100 text-gray-800'
-        }`}>{v.status}</span>
-      </div>
-      <div className="text-sm text-green-700 mb-1">{v.make} {v.model} ({v.year || '—'})</div>
-      <div className="text-sm text-green-600 mb-1">Odometer: {v.odometer != null ? `${Number(v.odometer).toLocaleString()} km` : '—'}</div>
-      <div className="text-sm text-green-600 mb-1">Fuel: {v.fuel_type || '—'}</div>
-      <div className="text-sm text-green-600">Dept: {v.department || '—'}</div>
-    </div>
-  ))}
-</div>
-
+        {/* Vehicle Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {loading && <div className="text-green-600 text-center col-span-full py-12">Loading vehicles...</div>}
+          {!loading && paged.length === 0 && <div className="text-green-600 text-center col-span-full py-12">No vehicles found.</div>}
+          {!loading && paged.map(v => (
+            <div
+              key={v.id}
+              onClick={() => router.push(`./vehicles/${v.id}`)}
+              className="cursor-pointer bg-white p-4 rounded-lg shadow border border-green-100 hover:shadow-lg hover:border-green-300 transition flex flex-col"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-semibold text-green-800 text-lg">{v.registration_number}</h3>
+                <span className={`px-2 py-1 text-xs font-semibold rounded ${
+                  v.status === 'Active' ? 'bg-green-200 text-green-900' :
+                  v.status === 'Maintenance' ? 'bg-yellow-50 text-yellow-900' :
+                  v.status === 'Incident' ? 'bg-red-50 text-red-800' :
+                  'bg-gray-100 text-gray-800'
+                }`}>{v.status}</span>
+              </div>
+              <div className="text-sm text-green-700 mb-1">{v.make} {v.model} ({v.year || '—'})</div>
+              <div className="text-sm text-green-600 mb-1">Odometer: {v.odometer != null ? `${Number(v.odometer).toLocaleString()} km` : '—'}</div>
+              <div className="text-sm text-green-600 mb-1">Fuel: {v.fuel_type || '—'}</div>
+              <div className="text-sm text-green-600">Dept: {v.department || '—'}</div>
+            </div>
+          ))}
+        </div>
 
         {/* Pagination */}
         <div className="flex items-center justify-between mt-6">
@@ -272,17 +384,6 @@ export default function VehiclesPage() {
           <VehicleForm onSuccess={() => { fetchVehicles(); setOpenAdd(false); }} onClose={() => setOpenAdd(false)} />
         </Modal>
       </main>
-    </div>
-  );
-}
-
-// Stat card component
-function StatCard({ title, value, icon }) {
-  return (
-    <div className="bg-white p-6 rounded-lg shadow hover:shadow-lg transition border border-green-200 flex flex-col items-start h-full">
-      <div className="text-green-600 text-3xl mb-3">{icon}</div>
-      <h3 className="text-lg font-semibold text-green-700">{title}</h3>
-      <p className="text-2xl font-bold text-green-900 mt-2">{value}</p>
     </div>
   );
 }

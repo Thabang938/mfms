@@ -6,6 +6,7 @@ import SideBar from '@/components/SideBar';
 import Modal from '@/components/Modal';
 import ServiceForm from '@/components/Forms/ServiceForm';
 import { FaTools, FaPlus, FaSearch, FaDownload } from 'react-icons/fa';
+import { Toaster, toast } from 'react-hot-toast';
 
 export default function ServicesPage() {
   const router = useRouter();
@@ -23,26 +24,27 @@ export default function ServicesPage() {
   const [page, setPage] = useState(1);
 
   const [userRole, setUserRole] = useState(null);
+  const [updatingId, setUpdatingId] = useState(null);
 
   // -------------------- Session Management --------------------
- useEffect(() => {
-  const checkSession = async () => {
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    setSession(session); // No redirect here
-    setLoadingSession(false);
-  };
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      setSession(session);
+      setLoadingSession(false);
+    };
 
-  checkSession();
+    checkSession();
 
-  const { data: listener } = supabaseClient.auth.onAuthStateChange((_event, session) => {
-    setSession(session);
-    if (!session) router.push('/Login');
-  });
+    const { data: listener } = supabaseClient.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (!session) router.push('/Login');
+    });
 
-  return () => {
-    listener.subscription.unsubscribe();
-  };
-}, [router]);
+    return () => {
+      listener.subscription.unsubscribe();
+    };
+  }, [router]);
 
   // -------------------- Fetch Vehicles --------------------
   async function fetchVehicles() {
@@ -66,7 +68,6 @@ export default function ServicesPage() {
       const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
       if (userError) throw userError;
 
-      // Get role from users table
       const { data: profile, error: profileError } = await supabaseClient
         .from('users')
         .select('role')
@@ -76,7 +77,6 @@ export default function ServicesPage() {
 
       setUserRole(profile?.role || 'User');
 
-      // Fetch services
       const { data, error } = await supabaseClient
         .from('services')
         .select('*')
@@ -106,6 +106,32 @@ export default function ServicesPage() {
     return v ? `${v.registration_number} — ${v.make} ${v.model}` : 'Unknown Vehicle';
   };
 
+  // -------------------- Update Status --------------------
+const updateServiceStatus = async (serviceId, currentStatus, newStatus) => {
+    if ((currentStatus === 'Scheduled' || currentStatus === 'Overdue') && newStatus === 'Completed') {
+      const confirmed = window.confirm(`Are you sure you want to mark this service as ${newStatus}? This action cannot be undone.`);
+      if (!confirmed) return;
+    }
+
+    setUpdatingId(serviceId);
+    try {
+      const { error } = await supabaseClient
+        .from('services')
+        .update({ status: newStatus })
+        .eq('id', serviceId);
+
+      if (error) throw error;
+
+      toast.success(`Service status updated to ${newStatus}`);
+      fetchServices();
+    } catch (err) {
+      console.error('Error updating status:', err.message);
+      toast.error('Failed to update service status');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   // -------------------- Summary --------------------
   const summary = useMemo(() => ({
     Scheduled: services.filter(s => s.status === 'Scheduled').length,
@@ -113,6 +139,23 @@ export default function ServicesPage() {
     Completed: services.filter(s => s.status === 'Completed').length,
     Overdue: services.filter(s => s.status === 'Overdue').length,
   }), [services]);
+
+  // -------------------- Alert for matching service dates with upcoming --------------------
+  useEffect(() => {
+    const shownAlerts = new Set();
+    services.forEach(s => {
+      if (s.service_date && s.upcoming_service_date && s.service_date === s.upcoming_service_date && s.status !== 'Completed') {
+        const alertKey = `${s.id}-${s.service_date}`;
+        if (!shownAlerts.has(alertKey)) {
+          toast.warning(
+            `⏰ Service on ${s.service_date} (Vehicle: ${getVehicleLabel(s.vehicle_id)}) - service date matches upcoming date!`,
+            { duration: 5000 }
+          );
+          shownAlerts.add(alertKey);
+        }
+      }
+    });
+  }, [services, vehicles]);
 
   // -------------------- Filter by Tab --------------------
   const baseList = useMemo(() => {
@@ -128,7 +171,7 @@ export default function ServicesPage() {
     if (!q) return baseList;
     return baseList.filter(s => {
       const vehicleLabel = getVehicleLabel(s.vehicle_id);
-      return `${vehicleLabel} ${s.service_type || ''} ${s.technician || ''} ${s.notes || ''}`.toLowerCase().includes(q);
+      return `${vehicleLabel} ${s.notes || ''} ${s.technician || ''}`.toLowerCase().includes(q);
     });
   }, [baseList, search, vehicles]);
 
@@ -145,12 +188,11 @@ export default function ServicesPage() {
       id: s.id,
       date: s.service_date,
       vehicle: getVehicleLabel(s.vehicle_id),
-      type: s.service_type || '',
+      type: s.notes || '',
       technician: s.technician || '',
       mileage: s.mileage || '',
       cost: s.cost || '',
       status: s.status || '',
-      notes: s.notes || '',
     }));
 
     const header = Object.keys(rows[0]).join(',');
@@ -175,6 +217,7 @@ export default function ServicesPage() {
   // -------------------- Render --------------------
   return (
     <div className="min-h-screen flex bg-green-50">
+      <Toaster position="top-right" />
       <SideBar />
       <main className="flex-1 p-8">
         {/* Header */}
@@ -192,7 +235,7 @@ export default function ServicesPage() {
               <input
                 aria-label="Search services"
                 className="pl-10 pr-4 py-2 border rounded-md w-72 focus:ring-2 focus:ring-green-200 bg-white"
-                placeholder="Search vehicle, technician, notes..."
+                placeholder="Search vehicle, service type, technician..."
                 value={search}
                 onChange={e => { setSearch(e.target.value); setPage(1); }}
               />
@@ -251,25 +294,46 @@ export default function ServicesPage() {
                 </tr>
               </thead>
               <tbody>
-                {paged.map((s,i) => (
-                  <tr key={s.id || i} className="border-t hover:bg-green-50">
-                    <td className="px-4 py-3">{s.id}</td>
-                    <td className="px-4 py-3">{getVehicleLabel(s.vehicle_id)}</td>
-                    <td className="px-4 py-3">{s.service_type || '—'}</td>
-                    <td className="px-4 py-3">{s.service_date || '—'}</td>
-                    <td className="px-4 py-3">{s.technician || '—'}</td>
-                    <td className="px-4 py-3">R {Number(s.cost||0).toLocaleString()}</td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                        s.status==='Scheduled'?'bg-yellow-100 text-yellow-700':
-                        s.status==='Completed'?'bg-green-100 text-green-700':
-                        s.status==='In Progress'?'bg-blue-100 text-blue-700':
-                        s.status==='Overdue'?'bg-red-100 text-red-700':'bg-gray-100 text-gray-700'}`}>
-                        {s.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {paged.map((s,i) => {
+                  const isEditable = s.status === 'Scheduled' || s.status === 'Overdue';
+                  return (
+                    <tr key={s.id || i} className={`border-t hover:bg-green-50`}>
+                      <td className="px-4 py-3">{s.id}</td>
+                      <td className="px-4 py-3">{getVehicleLabel(s.vehicle_id)}</td>
+                      <td className="px-4 py-3">{s.notes || '—'}</td>
+                      <td className="px-4 py-3">{s.service_date || '—'}</td>
+                      <td className="px-4 py-3">{s.technician || '—'}</td>
+                      <td className="px-4 py-3">R {Number(s.cost||0).toLocaleString()}</td>
+                      <td className="px-4 py-3">
+                        {!isEditable ? (
+                          <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                            s.status === 'Completed' ? 'bg-green-100 text-green-700 font-bold' :
+                            s.status === 'Scheduled' ? 'bg-green-50 text-green-700' :
+                            s.status === 'Overdue' ? 'bg-green-200 text-green-700' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>
+                            {s.status}
+                          </span>
+                        ) : (
+                          <select
+                            value={s.status || 'Scheduled'}
+                            onChange={(e) => updateServiceStatus(s.id, s.status, e.target.value)}
+                            disabled={updatingId === s.id}
+                            className={`px-2 py-1 rounded text-xs font-semibold border cursor-pointer transition ${
+                              s.status === 'Scheduled' ? 'bg-green-50 text-green-700' :
+                              s.status === 'Overdue' ? 'bg-green-200 text-green-700' :
+                              'bg-gray-100 text-gray-700 border-gray-300'
+                            } ${updatingId === s.id ? 'opacity-50' : 'hover:shadow-md'}`}
+                          >
+                            <option value="Scheduled">Scheduled</option>
+                            <option value="Overdue">Overdue</option>
+                            <option value="Completed">Completed</option>
+                          </select>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
 
@@ -298,7 +362,6 @@ export default function ServicesPage() {
             </div>
           </div>
         )}
-
       </main>
 
       {/* Modal */}
