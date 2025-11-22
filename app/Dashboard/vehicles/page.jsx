@@ -1,4 +1,3 @@
-// ...existing code...
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -46,7 +45,7 @@ export default function VehiclesPage() {
     };
   }, [router]);
 
-  // --- Fetch vehicles (RLS enforced) ---
+  // --- Fetch vehicles ---
   async function fetchVehicles() {
     if (!session) return;
     setLoading(true);
@@ -73,7 +72,7 @@ export default function VehiclesPage() {
     return Array.from(setDept).sort();
   }, [vehicles]);
 
-  // --- Stats for summary cards ---
+  // --- Stats ---
   const stats = useMemo(() => {
     const total = vehicles.length;
     const maintenance = vehicles.filter(v => v.status === 'Maintenance').length;
@@ -133,7 +132,7 @@ export default function VehiclesPage() {
     URL.revokeObjectURL(url);
   }
 
-  // --- Chart Data (green / white theme) ---
+  // --- Chart Data ---
   const statusPieData = useMemo(() => {
     const labels = Object.keys(stats.statusCounts);
     const data = labels.map(l => stats.statusCounts[l]);
@@ -166,19 +165,9 @@ export default function VehiclesPage() {
   }, [stats.deptCounts]);
 
   const chartOptions = {
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        backgroundColor: '#f0fff4',
-        titleColor: '#064e3b',
-        bodyColor: '#064e3b'
-      }
-    },
+    plugins: { legend: { display: false } },
     maintainAspectRatio: false,
-    scales: {
-      x: { ticks: { color: '#065f46' }, grid: { display: false } },
-      y: { ticks: { color: '#065f46' }, grid: { color: 'rgba(16,185,129,0.08)' } },
-    },
+    layout: { padding: 5 },
   };
 
   if (loadingSession) {
@@ -216,67 +205,73 @@ export default function VehiclesPage() {
           </div>
         </div>
 
-        {/* Enhanced Summary Cards with Graphs (Total Vehicles card now only shows a pie chart) */}
+        {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white p-4 rounded-lg border border-green-100 shadow-sm flex flex-col items-center justify-center">
-            <div className="text-sm text-green-700 mb-2">Fleet Status</div>
-            <div className="w-full h-40">
-              {/* TOTAL VEHICLES: only pie chart (no large numeric) */}
-              <Pie data={statusPieData} options={{ ...chartOptions, plugins: { legend: { position: 'bottom', labels: { color: '#064e3b' } } } }} />
+          {/* Total Vehicles Card */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-green-100 flex flex-col items-center text-center">
+            <h2 className="text-sm text-green-700 mb-2 font-medium">Total Vehicles</h2>
+            <div className="w-36 h-36">
+              <Pie data={statusPieData} options={chartOptions} />
             </div>
-            <div className="text-xs text-green-600 mt-3">Distribution by status</div>
+            <p className="text-3xl font-bold text-green-900 mt-3">{stats.total}</p>
+            <p className="text-xs text-green-600 mt-1">Total vehicles in fleet</p>
           </div>
 
-          <div className="bg-white p-4 rounded-lg border border-green-100 shadow-sm flex flex-col items-center justify-center">
-            <div className="text-sm text-green-700 mb-1">Active Vehicles</div>
-            <div className="text-2xl font-bold text-green-900 mb-2">{stats.active}</div>
+          {/* Active Vehicles */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-green-100 flex flex-col items-center text-center">
+            <h2 className="text-sm text-green-700 mb-1">Active Vehicles</h2>
+            <p className="text-2xl font-bold text-green-900 mb-2">{stats.active}</p>
             <div className="w-full h-32">
-              <Bar data={{
-                labels: ['Active', 'Retired', 'Incident', 'Maintenance'],
-                datasets: [{
-                  label: 'Count',
-                  data: [
-                    stats.active,
-                    stats.retired,
-                    stats.incident,
-                    stats.maintenance,
-                  ],
-                  backgroundColor: ['#16a34a', '#bbf7d0', '#86efac', '#bbf7d0'],
-                  borderColor: '#ffffff',
-                  barThickness: 18,
-                }],
-              }} options={chartOptions} />
+              <Bar
+                data={{
+                  labels: ['Active', 'Retired', 'Incident', 'Maintenance'],
+                  datasets: [{
+                    label: 'Count',
+                    data: [stats.active, stats.retired, stats.incident, stats.maintenance],
+                    backgroundColor: ['#16a34a', '#bbf7d0', '#86efac', '#bbf7d0'],
+                    borderColor: '#ffffff',
+                    borderRadius: 6,
+                    barThickness: 18,
+                  }],
+                }}
+                options={{ ...chartOptions, plugins: { legend: { display: false } } }}
+              />
             </div>
-            <div className="text-xs text-green-600 mt-2">Fleet status overview</div>
+            <p className="text-xs text-green-600 mt-2">Fleet status overview</p>
           </div>
 
-          <div className="bg-white p-4 rounded-lg border border-green-100 shadow-sm flex flex-col items-center justify-center">
-            <div className="text-sm text-green-700 mb-1">In Maintenance</div>
-            <div className="text-2xl font-bold text-green-900 mb-2">{stats.maintenance}</div>
+          {/* Maintenance */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-green-100 flex flex-col items-center text-center">
+            <h2 className="text-sm text-green-700 mb-1">In Maintenance</h2>
+            <p className="text-2xl font-bold text-green-900 mb-2">{stats.maintenance}</p>
             <div className="w-full h-32">
-              <Bar data={{
-                labels: Object.keys(stats.deptCounts),
-                datasets: [{
-                  label: 'Maintenance',
-                  data: Object.keys(stats.deptCounts).map(dep =>
-                    vehicles.filter(v => v.department === dep && v.status === 'Maintenance').length
-                  ),
-                  backgroundColor: Object.keys(stats.deptCounts).map((_, i) => ['#bbf7d0', '#86efac', '#34d399', '#16a34a'][i % 4]),
-                  borderRadius: 6,
-                  barThickness: 18,
-                }],
-              }} options={chartOptions} />
+              <Bar
+                data={{
+                  labels: Object.keys(stats.deptCounts),
+                  datasets: [{
+                    label: 'Maintenance',
+                    data: Object.keys(stats.deptCounts).map(dep =>
+                      vehicles.filter(v => v.department === dep && v.status === 'Maintenance').length
+                    ),
+                    backgroundColor: Object.keys(stats.deptCounts).map((_, i) => ['#bbf7d0', '#86efac', '#34d399', '#16a34a'][i % 4]),
+                    borderRadius: 6,
+                    barThickness: 18,
+                  }],
+                }}
+                options={{ ...chartOptions, plugins: { legend: { display: false } } }}
+              />
             </div>
-            <div className="text-xs text-green-600 mt-2">Maintenance by department</div>
+            <p className="text-xs text-green-600 mt-2">Maintenance by department</p>
           </div>
 
-          <div className="bg-white p-4 rounded-lg border border-green-100 shadow-sm flex flex-col items-center justify-center">
-            <div className="text-sm text-green-700 mb-1">By Department</div>
-            <div className="text-2xl font-bold text-green-900 mb-2">{Object.keys(stats.deptCounts).length}</div>
+          {/* By Department */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-green-100 flex flex-col items-center text-center">
+            <h2 className="text-sm text-green-700 mb-1">By Department</h2>
+            <p className="text-2xl font-bold text-green-900 mb-2">{Object.keys(stats.deptCounts).length}</p>
             <div className="w-full h-32">
-              <Bar data={deptBarData} options={chartOptions} />
+              <Bar data={deptBarData} options={{ ...chartOptions, plugins: { legend: { display: false } } }} />
             </div>
-            <div className="text-xs text-green-600 mt-2">Department distribution</div>
+            <p className="text-xs text-green-600 mt-2">Department distribution</p>
           </div>
         </div>
 

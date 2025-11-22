@@ -5,7 +5,7 @@ import { supabaseClient } from '@/lib/supabaseClient';
 import SideBar from '@/components/SideBar';
 import Modal from '@/components/Modal';
 import FuelForm from '@/components/Forms/FuelForm';
-import { FaPlus, FaSearch, FaChevronLeft, FaChevronRight, FaDownload } from 'react-icons/fa';
+import { FaPlus, FaSearch, FaDownload } from 'react-icons/fa';
 
 export default function FuelPage() {
   const router = useRouter();
@@ -18,32 +18,31 @@ export default function FuelPage() {
   const [openAdd, setOpenAdd] = useState(false);
 
   const [search, setSearch] = useState('');
-  const [dateFrom, setDateFrom] = useState(() => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0,10); });
+  const [dateFrom, setDateFrom] = useState(() => {
+    const d = new Date(); 
+    d.setDate(1); 
+    return d.toISOString().slice(0,10); 
+  });
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0,10));
-  const [statusFilter, setStatusFilter] = useState('');
   const [perPage, setPerPage] = useState(10);
   const [page, setPage] = useState(1);
-  const [userRole, setUserRole] = useState(null);
 
   // -------------------- Session Management --------------------
- useEffect(() => {
-  const checkSession = async () => {
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    setSession(session); // No redirect here
-    setLoadingSession(false);
-  };
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      setSession(session);
+      setLoadingSession(false);
+    };
+    checkSession();
 
-  checkSession();
+    const { data: listener } = supabaseClient.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (!session) router.push('/Login');
+    });
 
-  const { data: listener } = supabaseClient.auth.onAuthStateChange((_event, session) => {
-    setSession(session);
-    if (!session) router.push('/Login');
-  });
-
-  return () => {
-    listener.subscription.unsubscribe();
-  };
-}, [router]);
+    return () => listener.subscription.unsubscribe();
+  }, [router]);
 
   // -------------------- Fetch Vehicles --------------------
   const fetchVehicles = async () => {
@@ -67,20 +66,19 @@ export default function FuelPage() {
       const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
       if (userError) throw userError;
 
-      const { data: profile, error: profileError } = await supabaseClient
-        .from('users')
-        .select('role')
-        .eq('auth_id', user.id)
-        .single();
-      if (profileError) throw profileError;
-      setUserRole(profile?.role || 'User');
-
       let query = supabaseClient
         .from('fuel_logs')
         .select('*')
         .order('purchase_date', { ascending: false });
 
       // RLS: restrict non-admin/fleet users to their own logs
+      const { data: profile, error: profileError } = await supabaseClient
+        .from('users')
+        .select('role')
+        .eq('auth_id', user.id)
+        .single();
+      if (profileError) throw profileError;
+
       if (!['Fleet Manager', 'Admin Clerk'].includes(profile?.role)) {
         query = query.eq('user_id', user.id);
       }
@@ -110,7 +108,8 @@ export default function FuelPage() {
     return v ? `MV-${v.registration_number} — ${v.make || ''} ${v.model || ''}`.trim() : 'Unknown';
   };
 
-  const formatCurrencyFixed = (value) => `R ${Number(value || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const formatCurrencyFixed = (value) => 
+    `R ${Number(value || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   // -------------------- Filtered & Paginated --------------------
   const filtered = useMemo(() => {
@@ -118,7 +117,6 @@ export default function FuelPage() {
     const to = dateTo || '';
     const q = (search || '').trim().toLowerCase();
     return fuelLogs.filter(f => {
-      if (statusFilter && (f.status || '') !== statusFilter) return false;
       if (from && f.purchase_date && f.purchase_date < from) return false;
       if (to && f.purchase_date && f.purchase_date > to) return false;
       if (!q) return true;
@@ -127,7 +125,7 @@ export default function FuelPage() {
              vehicle.includes(q) ||
              (f.station || '').toLowerCase().includes(q);
     });
-  }, [fuelLogs, search, dateFrom, dateTo, statusFilter, vehicles]);
+  }, [fuelLogs, search, dateFrom, dateTo, vehicles]);
 
   const total = filtered.length;
   const pageCount = Math.max(1, Math.ceil(total / perPage));
@@ -158,8 +156,7 @@ export default function FuelPage() {
       liters: r.liters,
       cost: r.cost,
       station: r.station,
-      odometer: r.odometer,
-      status: r.status
+      odometer: r.odometer
     }));
     const header = Object.keys(rows[0]).join(',');
     const csv = [header, ...rows.map(r => Object.values(r).map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))].join('\n');
@@ -206,12 +203,6 @@ export default function FuelPage() {
             </div>
             <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1); }} className="px-3 py-2 border rounded bg-white text-sm" />
             <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1); }} className="px-3 py-2 border rounded bg-white text-sm" />
-            <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }} className="px-3 py-2 border rounded bg-white text-sm">
-              <option value="">All</option>
-              <option value="Posted">Posted</option>
-              <option value="Pending">Pending</option>
-              <option value="Reconciled">Reconciled</option>
-            </select>
             <button onClick={() => setOpenAdd(true)} className="flex items-center gap-2 bg-green-700 text-white px-4 py-2 rounded hover:bg-green-800 transition">
               <FaPlus /> Add Fuel
             </button>
@@ -246,12 +237,11 @@ export default function FuelPage() {
                 <th className="px-4 py-3">Cost</th>
                 <th className="px-4 py-3">Odometer</th>
                 <th className="px-4 py-3">Station</th>
-                <th className="px-4 py-3">Status</th>
               </tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan="8" className="px-6 py-12 text-center text-green-600">Loading fuel logs...</td></tr>}
-              {!loading && paged.length === 0 && <tr><td colSpan="8" className="px-6 py-12 text-center text-green-600">No records found.</td></tr>}
+              {loading && <tr><td colSpan="7" className="px-6 py-12 text-center text-green-600">Loading fuel logs...</td></tr>}
+              {!loading && paged.length === 0 && <tr><td colSpan="7" className="px-6 py-12 text-center text-green-600">No records found.</td></tr>}
               {!loading && paged.map((log,i) => (
                 <tr key={log.id || i} className="border-t hover:bg-green-50 transition">
                   <td className="px-4 py-3">{log.transaction_id || `FUEL-${(page-1)*perPage+i+1}`}</td>
@@ -261,36 +251,41 @@ export default function FuelPage() {
                   <td className="px-4 py-3">{formatCurrencyFixed(log.cost)}</td>
                   <td className="px-4 py-3">{log.odometer ? `${Number(log.odometer).toLocaleString()} km` : '—'}</td>
                   <td className="px-4 py-3">{log.station || '—'}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                      log.status==='Posted'?'bg-green-200 text-green-800':
-                      log.status==='Pending'?'bg-yellow-200 text-yellow-800':
-                      log.status==='Reconciled'?'bg-blue-200 text-blue-800':'bg-gray-200 text-gray-800'}`}>
-                      {log.status || '—'}
-                    </span>
-                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
 
           {/* Pagination */}
-          <div className="flex items-center justify-between px-4 py-3 border-t bg-white">
-            <div className="flex items-center gap-3">
-              <button className="px-3 py-1 border rounded bg-white text-green-700 disabled:opacity-40"
-                      onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}><FaChevronLeft /> Prev</button>
-              <div className="text-sm text-green-900 font-medium">Page {page} / {pageCount}</div>
-              <button className="px-3 py-1 border rounded bg-white text-green-700 disabled:opacity-40"
-                      onClick={()=>setPage(p=>Math.min(pageCount,p+1))} disabled={page===pageCount}>Next <FaChevronRight /></button>
+          <div className="flex flex-col md:flex-row items-center justify-between px-4 py-3 border-t bg-white gap-3">
+            <div className="flex items-center gap-2">
+              <button
+                className="px-3 py-1 border rounded bg-white text-green-700 disabled:opacity-40"
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+              >Prev</button>
+
+              {Array.from({ length: pageCount }, (_, i) => (
+                <button
+                  key={i+1}
+                  onClick={() => setPage(i+1)}
+                  className={`px-3 py-1 rounded border ${page === i+1 ? 'bg-green-700 text-white' : 'bg-white text-green-700'} hover:bg-green-200`}
+                >{i+1}</button>
+              ))}
+
+              <button
+                className="px-3 py-1 border rounded bg-white text-green-700 disabled:opacity-40"
+                onClick={() => setPage(p => Math.min(pageCount, p + 1))}
+                disabled={page === pageCount}
+              >Next</button>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="text-sm text-green-700">Rows</div>
-              <select className="px-2 py-1 border rounded" value={perPage} onChange={e=>{setPerPage(Number(e.target.value)); setPage(1);}}>
+            <div className="text-sm text-green-700">Rows:
+              <select className="ml-2 px-2 py-1 border rounded" value={perPage} onChange={e => { setPerPage(Number(e.target.value)); setPage(1); }}>
                 <option value={5}>5</option>
                 <option value={10}>10</option>
                 <option value={25}>25</option>
               </select>
-              <div className="text-sm text-green-600">Total: <span className="font-medium text-green-800">{total}</span></div>
+              <span className="ml-4 font-medium text-green-800">Total: {total}</span>
             </div>
           </div>
         </div>

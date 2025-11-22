@@ -10,7 +10,6 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  // Redirect already logged-in users to dashboard
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabaseClient.auth.getSession();
@@ -36,19 +35,12 @@ export default function LoginPage() {
         return;
       }
 
-      // Wait briefly to ensure session is persisted
-      const { data: sessionData } = await supabaseClient.auth.getSession();
-      if (!sessionData.session) {
-        setErrorMessage('Failed to establish session. Please try again.');
-        setLoading(false);
-        return;
-      }
-
-      setLoading(false);
+      // Do NOT set loading to false — stay in "Signing In..." state
       router.push('/Dashboard');
+
     } catch (err) {
-      console.error('Login error:', err);
-      setErrorMessage('An unexpected error occurred. Please try again.');
+      console.error(err);
+      setErrorMessage('Unexpected error occurred.');
       setLoading(false);
     }
   };

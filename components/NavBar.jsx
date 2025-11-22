@@ -28,7 +28,7 @@ export default function NavBar() {
           <Link href="/About" className="hover:text-green-700">About</Link>
           <Link href="/Login" className="flex items-center gap-2 hover:text-green-700">
             <FaUserCircle className="text-2xl" />
-            Guest
+            Login
           </Link>
         </div>
 
@@ -52,7 +52,7 @@ export default function NavBar() {
             <Link href="/" className="hover:text-green-700">Home</Link>
             <Link href="/Login" className="flex items-center gap-2 hover:text-green-700">
               <FaUserCircle className="text-2xl" />
-              Guest
+              Login
             </Link>
           </div>
         </div>

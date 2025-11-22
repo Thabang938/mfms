@@ -64,40 +64,39 @@ export default function AccidentForm({ initial = {}, onSuccess, onClose }) {
         repair_date: form.repair_date || null,
       };
 
+      let accidentReportsPath = initial.accident_reports || null;
+
+      // Upload file if provided
+      if (file) {
+        const filePath = `accidents_reports/${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
+        const { error: uploadError } = await supabaseClient.storage
+          .from('Documents_Storage')
+          .upload(filePath, file, { upsert: true });
+
+        if (uploadError) throw uploadError;
+        accidentReportsPath = filePath;
+      }
+
+      payload.accident_reports = accidentReportsPath;
+
       let record;
       if (initial.id) {
-        const { data, error } = await supabaseClient.from('accidents').update(payload).eq('id', initial.id).select().single();
+        const { data, error } = await supabaseClient
+          .from('accidents')
+          .update(payload)
+          .eq('id', initial.id)
+          .select()
+          .single();
         if (error) throw error;
         record = data;
       } else {
-        const { data, error } = await supabaseClient.from('accidents').insert([payload]).select().single();
+        const { data, error } = await supabaseClient
+          .from('accidents')
+          .insert([payload])
+          .select()
+          .single();
         if (error) throw error;
         record = data;
-      }
-
-      // if file attached, upload to private bucket and insert documents row
-      if (file) {
-        const filePath = `accidents_reports/${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
-        const { error: uploadErr } = await supabaseClient.storage.from('Documents_Storage').upload(filePath, file, { upsert: true });
-        if (uploadErr) throw uploadErr;
-
-        // get current public.users row for uploaded_by
-        const { data: authData } = await supabaseClient.auth.getUser();
-        const authUserId = authData?.user?.id;
-        let uploadedBy = null;
-        if (authUserId) {
-          const { data: userRow } = await supabaseClient.from('users').select('id').eq('auth_id', authUserId).single();
-          uploadedBy = userRow?.id || null;
-        }
-
-        await supabaseClient.from('documents').insert([{
-          vehicle_id: form.vehicle_id || null,
-          doc_type: 'Accident Report',
-          name: file.name,
-          file_url: null,
-          storage_path: filePath,
-          uploaded_by: uploadedBy,
-        }]);
       }
 
       toast.success(initial.id ? 'Accident updated' : 'Accident reported');
@@ -114,47 +113,169 @@ export default function AccidentForm({ initial = {}, onSuccess, onClose }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4 p-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <input placeholder="Incident ID" value={form.incident_id} onChange={e => setForm({ ...form, incident_id: e.target.value })} className="p-2 border rounded" />
-        <select required value={form.vehicle_id} onChange={e => setForm({ ...form, vehicle_id: e.target.value })} className="p-2 border rounded">
-          <option value="">Select vehicle</option>
-          {vehicles.map(v => <option key={v.id} value={v.id}>{v.registration_number} — {v.make}</option>)}
-        </select>
+        <div>
+          <label className="block text-sm font-medium text-green-700 mb-1">Incident ID</label>
+          <input
+            placeholder="Auto-generated if empty"
+            value={form.incident_id}
+            onChange={e => setForm({ ...form, incident_id: e.target.value })}
+            className="p-2 border border-green-300 rounded w-full focus:outline-none focus:ring-2 focus:ring-green-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-green-700 mb-1">Vehicle *</label>
+          <select
+            required
+            value={form.vehicle_id}
+            onChange={e => setForm({ ...form, vehicle_id: e.target.value })}
+            className="p-2 border border-green-300 rounded w-full focus:outline-none focus:ring-2 focus:ring-green-500"
+          >
+            <option value="">Select vehicle</option>
+            {vehicles.map(v => (
+              <option key={v.id} value={v.id}>
+                {v.registration_number} — {v.make}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <select value={form.driver_id} onChange={e => setForm({ ...form, driver_id: e.target.value })} className="p-2 border rounded">
-          <option value="">Select driver (optional)</option>
-          {drivers.map(d => <option key={d.id} value={d.id}>{d.license_number}</option>)}
-        </select>
-
-        <input type="date" required value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="p-2 border rounded" />
+        <div>
+          <label className="block text-sm font-medium text-green-700 mb-1">Driver</label>
+          <select
+            value={form.driver_id}
+            onChange={e => setForm({ ...form, driver_id: e.target.value })}
+            className="p-2 border border-green-300 rounded w-full focus:outline-none focus:ring-2 focus:ring-green-500"
+          >
+            <option value="">Select driver (optional)</option>
+            {drivers.map(d => (
+              <option key={d.id} value={d.id}>
+                {d.license_number}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-green-700 mb-1">Date *</label>
+          <input
+            type="date"
+            required
+            value={form.date}
+            onChange={e => setForm({ ...form, date: e.target.value })}
+            className="p-2 border border-green-300 rounded w-full focus:outline-none focus:ring-2 focus:ring-green-500"
+          />
+        </div>
       </div>
 
-      <input placeholder="Location" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} className="p-2 border rounded w-full" />
-      <textarea placeholder="Damage" value={form.damage} onChange={e => setForm({ ...form, damage: e.target.value })} className="p-2 border rounded w-full" />
-      <input placeholder="Cause" value={form.cause} onChange={e => setForm({ ...form, cause: e.target.value })} className="p-2 border rounded w-full" />
+      <div>
+        <label className="block text-sm font-medium text-green-700 mb-1">Location</label>
+        <input
+          placeholder="Where the accident occurred"
+          value={form.location}
+          onChange={e => setForm({ ...form, location: e.target.value })}
+          className="p-2 border border-green-300 rounded w-full focus:outline-none focus:ring-2 focus:ring-green-500"
+        />
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <input placeholder="Estimated cost (R)" type="number" value={form.estimated_cost} onChange={e => setForm({ ...form, estimated_cost: e.target.value })} className="p-2 border rounded" />
-        <input type="date" value={form.repair_date} onChange={e => setForm({ ...form, repair_date: e.target.value })} className="p-2 border rounded" />
+        <div>
+          <label className="block text-sm font-medium text-green-700 mb-1">Damage Description</label>
+          <textarea
+            placeholder="Describe the damage"
+            value={form.damage}
+            onChange={e => setForm({ ...form, damage: e.target.value })}
+            className="p-2 border border-green-300 rounded w-full focus:outline-none focus:ring-2 focus:ring-green-500"
+            rows="3"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-green-700 mb-1">Cause</label>
+          <textarea
+            placeholder="What caused the accident"
+            value={form.cause}
+            onChange={e => setForm({ ...form, cause: e.target.value })}
+            className="p-2 border border-green-300 rounded w-full focus:outline-none focus:ring-2 focus:ring-green-500"
+            rows="3"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label className="block text-sm font-medium text-green-700 mb-1">Status</label>
+          <select
+            value={form.status}
+            onChange={e => setForm({ ...form, status: e.target.value })}
+            className="p-2 border border-green-300 rounded w-full focus:outline-none focus:ring-2 focus:ring-green-500"
+          >
+            <option value="Under Review">Under Review</option>
+            <option value="Filed">Filed</option>
+            <option value="Resolved">Resolved</option>
+            <option value="Rejected">Rejected</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-green-700 mb-1">Estimated Cost (R)</label>
+          <input
+            type="number"
+            step="0.01"
+            value={form.estimated_cost}
+            onChange={e => setForm({ ...form, estimated_cost: e.target.value })}
+            className="p-2 border border-green-300 rounded w-full focus:outline-none focus:ring-2 focus:ring-green-500"
+            placeholder="0.00"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-green-700 mb-1">Repair Date</label>
+        <input
+          type="date"
+          value={form.repair_date}
+          onChange={e => setForm({ ...form, repair_date: e.target.value })}
+          className="p-2 border border-green-300 rounded w-full focus:outline-none focus:ring-2 focus:ring-green-500"
+        />
       </div>
 
       <label className="flex items-center gap-2">
-        <input type="checkbox" checked={form.insurance_claim} onChange={e => setForm({ ...form, insurance_claim: e.target.checked })} />
-        <span className="text-sm">Insurance claim</span>
+        <input
+          type="checkbox"
+          checked={form.insurance_claim}
+          onChange={e => setForm({ ...form, insurance_claim: e.target.checked })}
+          className="w-4 h-4"
+        />
+        <span className="text-sm font-medium text-green-700">Insurance claim filed</span>
       </label>
 
       <div>
-        <label className="block text-sm text-green-700 mb-1">Upload Accident Report (optional)</label>
-        <input type="file" accept=".pdf,image/*" onChange={e => setFile(e.target.files?.[0] || null)} />
+        <label className="block text-sm font-medium text-green-700 mb-1">Accident Report (PDF/Image)</label>
+        <input
+          type="file"
+          accept=".pdf,.jpg,.jpeg,.png"
+          onChange={e => setFile(e.target.files?.[0] || null)}
+          className="w-full border border-green-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+        />
+        {file && <p className="text-sm text-green-600 mt-1">File selected: {file.name}</p>}
       </div>
 
-      <div className="flex justify-end gap-3 mt-2">
-        <button type="button" onClick={onClose} className="px-4 py-2 border rounded text-green-700">Cancel</button>
-        <button type="submit" disabled={loading} className="px-4 py-2 bg-green-700 text-white rounded flex items-center gap-2">
-          <FaSave /> {loading ? 'Saving...' : (initial.id ? 'Update Accident' : 'Add Accident')}
+      <div className="flex justify-end gap-3 mt-4">
+        <button
+          type="button"
+          onClick={onClose}
+          className="px-4 py-2 border border-green-300 rounded text-green-700 hover:bg-green-50 transition"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={loading}
+          className="px-4 py-2 bg-green-700 text-white rounded hover:bg-green-800 transition flex items-center gap-2 disabled:opacity-50"
+        >
+          <FaSave /> {loading ? 'Saving...' : (initial.id ? 'Update Accident' : 'Report Accident')}
         </button>
       </div>
     </form>
   );
 }
+// ...existing code...

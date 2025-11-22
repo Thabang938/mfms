@@ -25,7 +25,10 @@ export default function TireForm({ initial = {}, onSuccess, onClose }) {
   useEffect(() => {
     async function loadVehicles() {
       try {
-        const { data, error } = await supabaseClient.from('vehicles').select('id, registration_number').order('registration_number');
+        const { data, error } = await supabaseClient
+          .from('vehicles')
+          .select('id, registration_number')
+          .order('registration_number');
         if (error) throw error;
         setVehicles(data || []);
       } catch (err) {
@@ -58,11 +61,20 @@ export default function TireForm({ initial = {}, onSuccess, onClose }) {
 
       let record;
       if (initial.id) {
-        const { data, error } = await supabaseClient.from('tires').update(payload).eq('id', initial.id).select().single();
+        const { data, error } = await supabaseClient
+          .from('tires')
+          .update(payload)
+          .eq('id', initial.id)
+          .select()
+          .single();
         if (error) throw error;
         record = data;
       } else {
-        const { data, error } = await supabaseClient.from('tires').insert([payload]).select().single();
+        const { data, error } = await supabaseClient
+          .from('tires')
+          .insert([payload])
+          .select()
+          .single();
         if (error) throw error;
         record = data;
       }
@@ -80,41 +92,149 @@ export default function TireForm({ initial = {}, onSuccess, onClose }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 p-4">
-      <select required value={form.vehicle_id} onChange={e => setForm({ ...form, vehicle_id: e.target.value })} className="p-2 border rounded w-full">
-        <option value="">Select vehicle</option>
-        {vehicles.map(v => <option key={v.id} value={v.id}>{v.registration_number}</option>)}
-      </select>
-
-      <div className="grid grid-cols-2 gap-3">
-        <input placeholder="Brand" value={form.brand} onChange={e => setForm({ ...form, brand: e.target.value })} className="p-2 border rounded" />
-        <input placeholder="Serial number" value={form.serial_number} onChange={e => setForm({ ...form, serial_number: e.target.value })} className="p-2 border rounded" />
+      <div>
+        <label className="block text-sm font-medium text-green-700 mb-1">Vehicle *</label>
+        <select
+          required
+          value={form.vehicle_id}
+          onChange={e => setForm({ ...form, vehicle_id: e.target.value })}
+          className="p-2 border border-green-300 rounded w-full focus:outline-none focus:ring-2 focus:ring-green-500"
+        >
+          <option value="">Select vehicle</option>
+          {vehicles.map(v => (
+            <option key={v.id} value={v.id}>
+              {v.registration_number}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <input placeholder="Position (e.g., Front Left)" value={form.position} onChange={e => setForm({ ...form, position: e.target.value })} className="p-2 border rounded" />
-        <input type="date" value={form.install_date} onChange={e => setForm({ ...form, install_date: e.target.value })} className="p-2 border rounded" />
+        <div>
+          <label className="block text-sm font-medium text-green-700 mb-1">Position *</label>
+          <select
+            required
+            value={form.position}
+            onChange={e => setForm({ ...form, position: e.target.value })}
+            className="p-2 border border-green-300 rounded w-full focus:outline-none focus:ring-2 focus:ring-green-500"
+          >
+            <option value="">Select position</option>
+            <option value="Front Left">Front Left</option>
+            <option value="Front Right">Front Right</option>
+            <option value="Rear Left">Rear Left</option>
+            <option value="Rear Right">Rear Right</option>
+            <option value="Spare">Spare</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-green-700 mb-1">Brand *</label>
+          <input
+            required
+            value={form.brand}
+            onChange={e => setForm({ ...form, brand: e.target.value })}
+            className="p-2 border border-green-300 rounded w-full focus:outline-none focus:ring-2 focus:ring-green-500"
+            placeholder="Tire brand"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-sm font-medium text-green-700 mb-1">Serial Number</label>
+          <input
+            value={form.serial_number}
+            onChange={e => setForm({ ...form, serial_number: e.target.value })}
+            className="p-2 border border-green-300 rounded w-full focus:outline-none focus:ring-2 focus:ring-green-500"
+            placeholder="Serial number"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-green-700 mb-1">Install Date</label>
+          <input
+            type="date"
+            value={form.install_date}
+            onChange={e => setForm({ ...form, install_date: e.target.value })}
+            className="p-2 border border-green-300 rounded w-full focus:outline-none focus:ring-2 focus:ring-green-500"
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-3">
-        <input type="number" placeholder="Cost (R)" value={form.cost} onChange={e => setForm({ ...form, cost: e.target.value })} className="p-2 border rounded" />
-        <input type="number" placeholder="Mileage" value={form.mileage} onChange={e => setForm({ ...form, mileage: e.target.value })} className="p-2 border rounded" />
-        <input type="number" step="0.01" placeholder="Pressure" value={form.pressure} onChange={e => setForm({ ...form, pressure: e.target.value })} className="p-2 border rounded" />
+        <div>
+          <label className="block text-sm font-medium text-green-700 mb-1">Cost (R)</label>
+          <input
+            type="number"
+            step="0.01"
+            value={form.cost}
+            onChange={e => setForm({ ...form, cost: e.target.value })}
+            className="p-2 border border-green-300 rounded w-full focus:outline-none focus:ring-2 focus:ring-green-500"
+            placeholder="0.00"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-green-700 mb-1">Mileage (km)</label>
+          <input
+            type="number"
+            value={form.mileage}
+            onChange={e => setForm({ ...form, mileage: e.target.value })}
+            className="p-2 border border-green-300 rounded w-full focus:outline-none focus:ring-2 focus:ring-green-500"
+            placeholder="0"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-green-700 mb-1">Pressure (PSI)</label>
+          <input
+            type="number"
+            step="0.1"
+            value={form.pressure}
+            onChange={e => setForm({ ...form, pressure: e.target.value })}
+            className="p-2 border border-green-300 rounded w-full focus:outline-none focus:ring-2 focus:ring-green-500"
+            placeholder="0.0"
+          />
+        </div>
       </div>
 
-      <select value={form.condition} onChange={e => setForm({ ...form, condition: e.target.value })} className="p-2 border rounded w-full">
-        <option value="Good">Good</option>
-        <option value="Fair">Fair</option>
-        <option value="Replace Soon">Replace Soon</option>
-      </select>
+      <div>
+        <label className="block text-sm font-medium text-green-700 mb-1">Condition</label>
+        <select
+          value={form.condition}
+          onChange={e => setForm({ ...form, condition: e.target.value })}
+          className="p-2 border border-green-300 rounded w-full focus:outline-none focus:ring-2 focus:ring-green-500"
+        >
+          <option value="Good">Good</option>
+          <option value="Fair">Fair</option>
+          <option value="Replace Soon">Replace Soon</option>
+        </select>
+      </div>
 
-      <textarea placeholder="Notes" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="p-2 border rounded w-full" />
+      <div>
+        <label className="block text-sm font-medium text-green-700 mb-1">Notes</label>
+        <textarea
+          value={form.notes}
+          onChange={e => setForm({ ...form, notes: e.target.value })}
+          className="p-2 border border-green-300 rounded w-full focus:outline-none focus:ring-2 focus:ring-green-500"
+          placeholder="Additional notes"
+          rows="3"
+        />
+      </div>
 
-      <div className="flex justify-end gap-3 mt-2">
-        <button type="button" onClick={onClose} className="px-4 py-2 border rounded text-green-700">Cancel</button>
-        <button type="submit" disabled={loading} className="px-4 py-2 bg-green-700 text-white rounded flex items-center gap-2">
+      <div className="flex justify-end gap-3 mt-4">
+        <button
+          type="button"
+          onClick={onClose}
+          className="px-4 py-2 border border-green-300 rounded text-green-700 hover:bg-green-50 transition"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={loading}
+          className="px-4 py-2 bg-green-700 text-white rounded hover:bg-green-800 transition flex items-center gap-2 disabled:opacity-50"
+        >
           <FaSave /> {loading ? 'Saving...' : (initial.id ? 'Update Tyre' : 'Add Tyre')}
         </button>
       </div>
     </form>
   );
 }
+// ...existing code...

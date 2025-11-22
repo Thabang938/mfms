@@ -205,7 +205,7 @@ export default function LicensesPage() {
               <FaDownload className="mr-2" /> Export
             </button>
             <button onClick={() => setOpenAdd(true)} className="flex items-center bg-green-700 text-white px-4 py-2 rounded-md hover:bg-green-800 transition">
-              <FaPlus className="mr-2" /> Record Renewal
+              <FaPlus className="mr-2" /> Add License
             </button>
           </div>
         </div>

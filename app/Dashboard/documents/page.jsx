@@ -199,7 +199,6 @@ export default function DocumentsPage() {
                 <div className="text-sm text-green-700">Total Documents</div>
                 <div className="text-2xl font-bold text-green-900">{summary.total}</div>
               </div>
-              <div className="text-sm text-green-600">Vehicles: <span className="font-semibold text-green-800">{summary.vehiclesWithDocs}</span></div>
             </div>
             <div className="mt-3 h-44">
               <Pie data={typeChartData} options={{ ...chartOptions, plugins: { legend: { position: 'right' } } }} />

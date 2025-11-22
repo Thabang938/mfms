@@ -7,6 +7,8 @@ import Modal from '@/components/Modal';
 import ServiceForm from '@/components/Forms/ServiceForm';
 import { FaTools, FaPlus, FaSearch, FaDownload } from 'react-icons/fa';
 import { Toaster, toast } from 'react-hot-toast';
+import { Bar, Pie, Line } from 'react-chartjs-2';
+import 'chart.js/auto';
 
 export default function ServicesPage() {
   const router = useRouter();
@@ -35,7 +37,6 @@ export default function ServicesPage() {
     };
 
     checkSession();
-
     const { data: listener } = supabaseClient.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (!session) router.push('/Login');
@@ -107,7 +108,7 @@ export default function ServicesPage() {
   };
 
   // -------------------- Update Status --------------------
-const updateServiceStatus = async (serviceId, currentStatus, newStatus) => {
+  const updateServiceStatus = async (serviceId, currentStatus, newStatus) => {
     if ((currentStatus === 'Scheduled' || currentStatus === 'Overdue') && newStatus === 'Completed') {
       const confirmed = window.confirm(`Are you sure you want to mark this service as ${newStatus}? This action cannot be undone.`);
       if (!confirmed) return;
@@ -135,9 +136,8 @@ const updateServiceStatus = async (serviceId, currentStatus, newStatus) => {
   // -------------------- Summary --------------------
   const summary = useMemo(() => ({
     Scheduled: services.filter(s => s.status === 'Scheduled').length,
-    'In Progress': services.filter(s => s.status === 'In Progress').length,
-    Completed: services.filter(s => s.status === 'Completed').length,
     Overdue: services.filter(s => s.status === 'Overdue').length,
+    Completed: services.filter(s => s.status === 'Completed').length,
   }), [services]);
 
   // -------------------- Alert for matching service dates with upcoming --------------------
@@ -206,6 +206,87 @@ const updateServiceStatus = async (serviceId, currentStatus, newStatus) => {
     URL.revokeObjectURL(url);
   };
 
+  // -------------------- Chart Data --------------------
+  const statusPieData = useMemo(() => {
+    const labels = Object.keys(summary);
+    const data = labels.map(l => summary[l]);
+    return {
+      labels,
+      datasets: [{
+        data,
+        backgroundColor: ['#86efac', '#fbbf24', '#10b981'],
+        borderColor: '#ffffff',
+        borderWidth: 2,
+      }],
+    };
+  }, [summary]);
+
+  const costBarData = useMemo(() => {
+    const topVehicles = vehicles.slice(0, 5).map(v => {
+      const totalCost = services
+        .filter(s => s.vehicle_id === v.id)
+        .reduce((sum, s) => sum + (Number(s.maintenance_cost || s.cost || 0)), 0);
+      return { vehicle: v.registration_number, cost: totalCost };
+    });
+    return {
+      labels: topVehicles.map(v => v.vehicle),
+      datasets: [{
+        label: 'Maintenance Cost (R)',
+        data: topVehicles.map(v => v.cost),
+        backgroundColor: '#16a34a',
+        borderRadius: 6,
+        barThickness: 20,
+      }],
+    };
+  }, [vehicles, services]);
+
+  const techniciansData = useMemo(() => {
+    const techCounts = {};
+    services.forEach(s => {
+      const tech = s.technician || 'Unassigned';
+      techCounts[tech] = (techCounts[tech] || 0) + 1;
+    });
+    const labels = Object.keys(techCounts);
+    const data = labels.map(l => techCounts[l]);
+    return {
+      labels,
+      datasets: [{
+        data,
+        backgroundColor: ['#166534', '#0f766e', '#16a34a', '#34d399', '#86efac'],
+        borderColor: '#ffffff',
+        borderWidth: 1,
+      }],
+    };
+  }, [services]);
+
+  const chartOptions = {
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#f0fff4',
+        titleColor: '#064e3b',
+        bodyColor: '#064e3b'
+      }
+    },
+    maintainAspectRatio: false,
+    scales: {
+      x: { ticks: { color: '#065f46' }, grid: { display: false } },
+      y: { ticks: { color: '#065f46' }, grid: { color: 'rgba(16,185,129,0.08)' } },
+    },
+  };
+
+  const pieChartOptions = {
+    plugins: {
+      legend: { position: 'bottom', labels: { color: '#064e3b' } },
+      tooltip: {
+        backgroundColor: '#f0fff4',
+        titleColor: '#064e3b',
+        bodyColor: '#064e3b'
+      }
+    },
+    maintainAspectRatio: false,
+  };
+
   if (loadingSession) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -214,7 +295,6 @@ const updateServiceStatus = async (serviceId, currentStatus, newStatus) => {
     );
   }
 
-  // -------------------- Render --------------------
   return (
     <div className="min-h-screen flex bg-green-50">
       <Toaster position="top-right" />
@@ -249,14 +329,38 @@ const updateServiceStatus = async (serviceId, currentStatus, newStatus) => {
           </div>
         </div>
 
-        {/* Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          {Object.entries(summary).map(([label, count]) => (
-            <div key={label} className="bg-white p-4 rounded-lg border border-green-100 shadow-sm text-center">
-              <div className="text-sm text-green-700">{label}</div>
-              <div className="text-2xl font-bold text-green-900">{count}</div>
+        {/* Summary Cards with Charts */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          {/* Status Distribution */}
+          <div className="bg-white p-4 rounded-lg border border-green-100 shadow-sm">
+            <h3 className="text-sm font-semibold text-green-700 mb-3">Service Status</h3>
+            <div className="h-48">
+              <Pie data={statusPieData} options={pieChartOptions} />
             </div>
-          ))}
+            <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-center">
+              <div><p className="text-green-600">Scheduled</p><p className="font-bold text-green-900">{summary.Scheduled}</p></div>
+              <div><p className="text-yellow-600">Overdue</p><p className="font-bold text-yellow-900">{summary.Overdue}</p></div>
+              <div><p className="text-emerald-600">Completed</p><p className="font-bold text-emerald-900">{summary.Completed}</p></div>
+            </div>
+          </div>
+
+          {/* Top Vehicle Maintenance Costs */}
+          <div className="bg-white p-4 rounded-lg border border-green-100 shadow-sm">
+            <h3 className="text-sm font-semibold text-green-700 mb-3">Top Maintenance Costs</h3>
+            <div className="h-48">
+              <Bar data={costBarData} options={chartOptions} />
+            </div>
+            <p className="text-xs text-green-600 mt-2 text-center">Total: R {services.reduce((sum, s) => sum + (Number(s.maintenance_cost || s.cost || 0)), 0).toLocaleString()}</p>
+          </div>
+
+          {/* Technician Workload */}
+          <div className="bg-white p-4 rounded-lg border border-green-100 shadow-sm">
+            <h3 className="text-sm font-semibold text-green-700 mb-3">Technician Workload</h3>
+            <div className="h-48">
+              <Pie data={techniciansData} options={pieChartOptions} />
+            </div>
+            <p className="text-xs text-green-600 mt-2 text-center">Total Services: {services.length}</p>
+          </div>
         </div>
 
         {/* Tabs */}
